@@ -1,13 +1,16 @@
 # Makefile
 
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O2
+CXXFLAGS = -std=c++17 -Wall -O0
 
 # 最終的に作りたい実行ファイル名
 TARGET = rv32i_emu
+INCLUDES = -I. -I./memory -I./cpu 
 
 # コンパイルするソースファイル
-SRCS = main.cpp CPU.cpp
+SRCS = $(wildcard cpu/*.cpp) \
+	   $(wildcard memory/*.cpp) \
+		main.cpp \
 
 # オブジェクトファイル（自動生成）
 OBJS = $(SRCS:.cpp=.o)
@@ -17,11 +20,11 @@ all: $(TARGET)
 
 # リンク処理
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $^
 
 # 各.cppから.oを作るコンパイル処理
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # コンパイル結果の掃除
 clean:

@@ -1,7 +1,29 @@
 {
-    // IntelliSense を使用して利用可能な属性を学べます。
-    // 既存の属性の説明をホバーして表示します。
-    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+            "name": "(gdb) RISC-V Emulator Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            // あなたの Makefile が生成する実行ファイル名（ターゲット名）を指定
+            "program": "${workspaceFolder}/rv32i_emu",
+            // エミュレータに渡す引数（ロードするバイナリファイル名など）があればここに書くのよ
+            "args": [], 
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            // Linux (Ubuntu) などの環境を想定しているわ。環境に合わせてパスを確認しなさい
+            "miDebuggerPath": "/usr/bin/gdb",
+                "internalConsoleOptions": "openOnSessionStart"
+        }
+    ]
 }

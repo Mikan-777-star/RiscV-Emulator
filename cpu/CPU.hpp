@@ -1,5 +1,6 @@
 #pragma once
 #include "RiscV.hpp"
+#include "Memory.hpp"
 #include <queue>
 #include <vector>
 #include <array>
@@ -7,7 +8,6 @@
 
 class CPU {
 private:
-    std::vector<uint8_t> memory;
     std::array<uint32_t, 32> registers;
     uint32_t pc;
     bool last_stall_flag = false;
@@ -21,6 +21,7 @@ private:
     std::unordered_map<uint32_t, std::pair<uint8_t, uint32_t>> branch_predictor;
     std::unordered_map<uint32_t, uint32_t> csrs;
 public:
+    Memory memory;
     CPU();
     bool is_halted();
     // テスト用のインターフェース（内部状態を外からいじるためのもの）

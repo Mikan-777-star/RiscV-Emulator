@@ -1,5 +1,0 @@
-{
-    "vim.useSystemClipboard": true,
-    "vim.easymotion": true,
-    "vim.hlsearch":true
-}

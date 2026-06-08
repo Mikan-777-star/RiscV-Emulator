@@ -1,0 +1,137 @@
+#include "CPU.hpp"
+#include "RiscV.hpp"
+
+void CPU::decode() {
+    using namespace RiscV;
+    if (IF_ID_REG.empty()) return;
+    last_stall_flag = false;
+    
+    auto firstlatch = IF_ID_REG.front();
+    ID_EX_Latch latch{}; 
+    uint32_t inst = firstlatch.inst;
+    uint8_t opcode = inst & 0x7f;
+    uint8_t funct3 = (inst >> 12) & 0x7;
+    uint8_t funct7 = (inst >> 25);
+    
+    latch.rs1_idx = (inst >> 15) & 0x1f;
+    latch.rs2_idx = (inst >> 20) & 0x1f;
+    latch.rd_idx = (inst >> 7) & 0x1f;
+    latch.val_rs1 = registers[latch.rs1_idx];
+    latch.val_rs2 = registers[latch.rs2_idx];
+    latch.pc = firstlatch.pc;
+    latch.predicted_taken = firstlatch.predicted_taken;
+    latch.predicted_target = firstlatch.predicted_target;
+
+    switch (opcode) {
+        
+    case OP_RType:
+        latch.ctrl.reg_write = true;
+        latch.ctrl.wb_src = WB_SRC::ALU;
+        switch (funct3) {
+            case 0x0: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::ADD : ALU_OPS::SUB; break;
+            case 0x1: latch.ctrl.alu_op = ALU_OPS::SLL; break;
+            case 0x2: latch.ctrl.alu_op = ALU_OPS::SLT; break;
+            case 0x3: latch.ctrl.alu_op = ALU_OPS::SLTU; break;
+            case 0x4: latch.ctrl.alu_op = ALU_OPS::XOR; break;
+            case 0x5: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::SRL : ALU_OPS::SRA; break;
+            case 0x6: latch.ctrl.alu_op = ALU_OPS::OR; break;
+            case 0x7: latch.ctrl.alu_op = ALU_OPS::AND; break;
+        }
+        break;
+    case OP_IMM:
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.reg_write = true;
+        latch.imm = sign_extension(inst >> 20, 12);
+        switch (funct3) {
+            case 0x0: latch.ctrl.alu_op = ALU_OPS::ADD; break;
+            case 0x2: latch.ctrl.alu_op = ALU_OPS::SLT; break;
+            case 0x3: latch.ctrl.alu_op = ALU_OPS::SLTU; break;
+            case 0x4: latch.ctrl.alu_op = ALU_OPS::XOR; break;
+            case 0x6: latch.ctrl.alu_op = ALU_OPS::OR; break;
+            case 0x7: latch.ctrl.alu_op = ALU_OPS::AND; break;
+            case 0x1: latch.ctrl.alu_op = ALU_OPS::SLL; latch.imm &= 0x1F; break;
+            case 0x5: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::SRL : ALU_OPS::SRA; latch.imm &= 0x1F; break;
+        }
+        break;
+    case OP_LOAD:
+        latch.ctrl.wb_src = WB_SRC::MEM;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.mem_read = true;
+        latch.ctrl.reg_write = true;
+        latch.imm = sign_extension(inst >> 20, 12);
+        latch.ctrl.mem_size = static_cast<MEM_SIZE>(funct3 & 0x3);
+        latch.ctrl.mem_unsigned = (funct3 & 0x4) != 0;
+        break;
+    case OP_STORE:
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.mem_write = true;
+        latch.imm = sign_extension(((inst >> 25) << 5) | ((inst >> 7) & 0x1f), 12);
+        latch.ctrl.mem_size = static_cast<MEM_SIZE>(funct3 & 0x3);
+        break;
+    case OP_BRANCH:
+        latch.ctrl.src1_sel = ALU_SRC1::PC;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.imm = sign_extension(((inst >> 31) << 12) | ((inst >> 7) & 1) << 11 | ((inst >> 25) & 0x3f) << 5 | ((inst >> 8) & 0xf) << 1, 13);
+        latch.ctrl.is_branch = true;
+        latch.ctrl.branch_op = funct3;
+        break;
+    case OP_LUI:
+        latch.ctrl.src1_sel = ALU_SRC1::ZERO;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.reg_write = true;
+        latch.imm = inst & 0xFFFFF000;
+        break;
+    case OP_AUIPC:
+        latch.ctrl.src1_sel = ALU_SRC1::PC;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.reg_write = true;
+        latch.imm = inst & 0xFFFFF000;
+        break;
+    case OP_JAL:
+        latch.ctrl.wb_src = WB_SRC::PC4;
+        latch.ctrl.is_jump = true;
+        latch.ctrl.src1_sel = ALU_SRC1::PC;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.ctrl.reg_write = true;
+        latch.imm = sign_extension(((inst >> 31) & 0x1) << 20 | ((inst >> 12) & 0xff) << 12 | ((inst >> 20) & 0x1) << 11 | ((inst >> 21) & 0x3ff) << 1, 21);
+        break;
+    case OP_JALR:
+        latch.ctrl.wb_src = WB_SRC::PC4;
+        latch.ctrl.is_jump = true;
+        latch.ctrl.reg_write = true;
+        latch.ctrl.src2_sel = ALU_SRC2::IMM;
+        latch.imm = sign_extension(inst >> 20, 12);
+        break;
+    case OP_SYSTEM:
+        if (funct3 == 0x0) {
+            switch (inst >> 20) {
+                case 0x000: latch.ctrl.is_ecall = true; break;
+                case 0x001: latch.ctrl.is_ebreak = true; break;
+            }
+        }
+        break;
+    case OP_FENCE:
+        latch.ctrl.is_fence = true;
+        break;
+    }
+    
+    // --- ストール判定 ---
+    bool stall = false;
+    if (!EX_MEM_REG.empty()) {
+        auto ex_latch = EX_MEM_REG.back();
+        if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {
+            bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || latch.ctrl.is_jump);
+            bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
+            if (use_rs1 && ex_latch.rd_idx == latch.rs1_idx) stall = true;
+            if (use_rs2 && ex_latch.rd_idx == latch.rs2_idx) stall = true;
+        }
+    }
+    if (stall) {
+        last_stall_flag = true;
+        ID_EX_REG.push(ID_EX_Latch{}); // NOP挿入
+        return;
+    }
+
+    IF_ID_REG.pop();
+    ID_EX_REG.push(latch);
+}
