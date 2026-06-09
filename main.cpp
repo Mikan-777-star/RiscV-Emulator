@@ -153,21 +153,22 @@ void run_loop_test() {
 }
 
 void run_load_binary_test(){
-    CPU cpu;
-    cpu.memory.load_binary("hello.bin", 0x80000000);
-    std::string tmp;
+    CPU cpu = CPU();
+    cpu.memory.load_binary("firmware.bin", 0x80000000);
+    //std::string tmp;
     int cycle = 0;
     while (!cpu.is_halted() ) {
         cycle++;
-        if(cycle > 200) {
-            std::cout << "Test failed: Exceeded 100 cycles without halting.\n";
+        //std::cout << "Cycle " << std::setw(2) << cycle << "\n";
+        cpu.tick();
+        if(cycle > 1000){
+            std::cout << "timeout" << std::endl;
             return;
         }
-        cpu.tick();
-        std::cout << "Cycle " << std::setw(2) << cycle << "| IF: " << std::hex << cpu.get_id_ex_latch().pc <<
+        /*std::cout << "Cycle " << std::setw(2) << cycle << "| IF: " << std::hex << cpu.get_id_ex_latch().pc <<
                                                          " | EX: "<<cpu.get_ex_mem_latch().pc <<
                                                          " | MEM: "<<cpu.get_mem_wb_latch().pc << std::dec << "\n";
-        /*
+        
        std::cout << std::hex << "Cycle " << std::setw(2) << cycle 
                   << "\n |  x1: " << std::setw(2) << cpu.get_register(1) 
                   << " |  x2: " << std::setw(2) << cpu.get_register(2) 

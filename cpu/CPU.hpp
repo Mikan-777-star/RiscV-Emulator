@@ -15,6 +15,7 @@ private:
     std::array<uint32_t, 32> registers;
     uint32_t pc;
     uint32_t last_actual_target = 0; // 
+    bool different_flag = false;
     bool last_stall_flag = false;
     bool halted = false;
     std::queue<RiscV::IF_ID_Latch> IF_ID_REG;

@@ -18,6 +18,7 @@ void CPU::reset_pipeline() {
     IF_ID_REG = std::queue<RiscV::IF_ID_Latch>();
     ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
     EX_MEM_REG = std::queue<RiscV::EX_MEM_Latch>();
+    MEM_WB_REG = std::queue<RiscV::MEM_WB_Latch>();
     registers.fill(0);
     uint32_t mem_size = 1024 * 1024 * 2; // あなたの現在のメモリサイズ
     registers[2] = 0x80000000 + mem_size;
@@ -48,7 +49,13 @@ void CPU::inject_instruction(uint32_t inst) { RiscV::IF_ID_Latch latch = {inst, 
 void CPU::set_register(uint8_t idx, uint32_t val) { if (idx != 0) registers[idx] = val; }
 void CPU::set_pc(uint32_t new_pc) { pc = new_pc; }
 bool CPU::is_id_ex_empty() const { return ID_EX_REG.empty(); }
-RiscV::ID_EX_Latch CPU::get_id_ex_latch() const { return ID_EX_REG.front(); }
-RiscV::EX_MEM_Latch CPU::get_ex_mem_latch() const { return EX_MEM_REG.front(); }
-RiscV::MEM_WB_Latch CPU::get_mem_wb_latch() const { return MEM_WB_REG.front(); }
+RiscV::ID_EX_Latch CPU::get_id_ex_latch() const { 
+    return ID_EX_REG.empty() ? RiscV::ID_EX_Latch{} : ID_EX_REG.front(); 
+}
+RiscV::EX_MEM_Latch CPU::get_ex_mem_latch() const { 
+    return EX_MEM_REG.empty() ? RiscV::EX_MEM_Latch{} : EX_MEM_REG.front(); 
+}
+RiscV::MEM_WB_Latch CPU::get_mem_wb_latch() const { 
+    return MEM_WB_REG.empty() ? RiscV::MEM_WB_Latch{} : MEM_WB_REG.front(); 
+}
 uint32_t CPU::get_register(uint8_t rs) { return registers[rs]; }

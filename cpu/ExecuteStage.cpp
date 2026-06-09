@@ -175,7 +175,9 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
         }
 
         if ((latch.predicted_taken != actually_taken) || (actually_taken && (latch.predicted_target != actual_target))) {
+            different_flag = true;
             last_actual_target = actual_target; // 予測が外れたときの正しいターゲットPCを保存
+            //std::cout << "actual_target: " <<std::hex << actual_target << std::dec << "\n"; 
             flush_pipeline();
         }
     }

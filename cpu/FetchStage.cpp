@@ -3,15 +3,18 @@
 #include <iostream>
 void CPU::fetch() {
     if (pc < 0x80000000 || pc >= 0x80000000 + memory.size() - 3) return;
-    if (last_stall_flag) pc = last_actual_target; // 前回の分岐命令でストールしていた場合、PCを実際のターゲットに修正して再フェッチ 
+    if(different_flag){
+        pc = last_actual_target;
+        different_flag = false;
+    }
     //get_phys_addr is unnecessary here 
     //because Memory class already handles the address translation and range checking. 
     //We can directly read from memory using the virtual address (pc) and let the Memory class take care of it.
     //uint32_t p_addr = get_phys_addr(pc);
     uint32_t inst = memory.read_byte(pc) |
-                    (memory.read_byte(pc + 1) << 8) |
-                    (memory.read_byte(pc + 2) << 16) |
-                    (memory.read_byte(pc + 3) << 24);
+                    static_cast<uint32_t>(memory.read_byte(pc + 1) << 8) |
+                    static_cast<uint32_t>(memory.read_byte(pc + 2) << 16) |
+                    static_cast<uint32_t>(memory.read_byte(pc + 3) << 24);
     bool pred_taken = false;
     uint32_t pred_target = pc + 4; 
     auto it = branch_predictor.find(pc);
