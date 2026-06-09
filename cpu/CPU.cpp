@@ -1,13 +1,17 @@
 #include "CPU.hpp"
 #include <iostream>
 
-CPU::CPU() : memory(), registers({0}), pc(0x80000000) {}
+CPU::CPU() : registers({0}),  pc(0x80000000), memory() {
+    uint32_t mem_size = 1024 * 1024 * 2; // あなたの現在のメモリサイズ
+    registers[2] = 0x80000000 + mem_size; // スタックポインタ初期化
+}
 
 bool CPU::is_halted() { return halted; }
 
 void CPU::flush_pipeline() {
     IF_ID_REG = std::queue<RiscV::IF_ID_Latch>();
     ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
+    std::cout << "Pipeline flushed due to mispredicted branch.\n";
 }
 
 void CPU::reset_pipeline() {
@@ -15,6 +19,8 @@ void CPU::reset_pipeline() {
     ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
     EX_MEM_REG = std::queue<RiscV::EX_MEM_Latch>();
     registers.fill(0);
+    uint32_t mem_size = 1024 * 1024 * 2; // あなたの現在のメモリサイズ
+    registers[2] = 0x80000000 + mem_size;
     pc = 0x80000000;
 }
 
@@ -33,7 +39,6 @@ void CPU::tick() {
 
 // テスト用・ヘルパー関数
 void CPU::write_memory_word(uint32_t load_addr, uint32_t inst) {
-    load_addr = get_phys_addr(load_addr);
     memory.write_byte(load_addr, inst & 0xff);
     memory.write_byte(load_addr + 1, (inst >> 8) & 0xff);
     memory.write_byte(load_addr + 2, (inst >> 16) & 0xff);

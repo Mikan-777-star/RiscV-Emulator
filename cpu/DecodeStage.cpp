@@ -1,10 +1,10 @@
 #include "CPU.hpp"
 #include "RiscV.hpp"
-
+#include <iostream>
 void CPU::decode() {
     using namespace RiscV;
-    if (IF_ID_REG.empty()) return;
     last_stall_flag = false;
+    if (IF_ID_REG.empty()) return;
     
     auto firstlatch = IF_ID_REG.front();
     ID_EX_Latch latch{}; 
@@ -27,6 +27,8 @@ void CPU::decode() {
     case OP_RType:
         latch.ctrl.reg_write = true;
         latch.ctrl.wb_src = WB_SRC::ALU;
+        latch.ctrl.src1_sel = ALU_SRC1::RS1;
+        latch.ctrl.src2_sel = ALU_SRC2::RS2;
         switch (funct3) {
             case 0x0: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::ADD : ALU_OPS::SUB; break;
             case 0x1: latch.ctrl.alu_op = ALU_OPS::SLL; break;
@@ -39,6 +41,8 @@ void CPU::decode() {
         }
         break;
     case OP_IMM:
+        latch.ctrl.wb_src = WB_SRC::ALU;
+        latch.ctrl.src1_sel = ALU_SRC1::RS1;
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.ctrl.reg_write = true;
         latch.imm = sign_extension(inst >> 20, 12);
@@ -54,6 +58,8 @@ void CPU::decode() {
         }
         break;
     case OP_LOAD:
+        latch.ctrl.alu_op = ALU_OPS::ADD;
+        latch.ctrl.src1_sel = ALU_SRC1::RS1;
         latch.ctrl.wb_src = WB_SRC::MEM;
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.ctrl.mem_read = true;
@@ -63,6 +69,8 @@ void CPU::decode() {
         latch.ctrl.mem_unsigned = (funct3 & 0x4) != 0;
         break;
     case OP_STORE:
+        latch.ctrl.alu_op = ALU_OPS::ADD;
+        latch.ctrl.src1_sel = ALU_SRC1::RS1;
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.ctrl.mem_write = true;
         latch.imm = sign_extension(((inst >> 25) << 5) | ((inst >> 7) & 0x1f), 12);
@@ -94,13 +102,17 @@ void CPU::decode() {
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.ctrl.reg_write = true;
         latch.imm = sign_extension(((inst >> 31) & 0x1) << 20 | ((inst >> 12) & 0xff) << 12 | ((inst >> 20) & 0x1) << 11 | ((inst >> 21) & 0x3ff) << 1, 21);
+        std::cout << "Decoded JAL: imm=" << std::hex << latch.imm << std::dec << std::endl;
         break;
     case OP_JALR:
         latch.ctrl.wb_src = WB_SRC::PC4;
         latch.ctrl.is_jump = true;
         latch.ctrl.reg_write = true;
+        latch.ctrl.src1_sel = ALU_SRC1::RS1;
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.imm = sign_extension(inst >> 20, 12);
+        // ★ここに latch.ctrl.alu_op = ALU_OPS::ADD; が足りない！
+        std::cout << "Decoded JALR: imm=" << std::hex << latch.imm  << " RS1=" << static_cast<int>(latch.rs1_idx) << std::dec << std::endl;
         break;
     case OP_SYSTEM:
         if (funct3 == 0x0) {
@@ -118,18 +130,24 @@ void CPU::decode() {
     // --- ストール判定 ---
     bool stall = false;
     if (!EX_MEM_REG.empty()) {
-        auto ex_latch = EX_MEM_REG.back();
+        auto ex_latch = EX_MEM_REG.back(); // ※お使いの設計に合わせてfront/backは要確認
         if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {
-            bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || latch.ctrl.is_jump);
+            // ★修正：JALRはRS1を使用するが、JALはRS1を使用しない
+            bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR);
             bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
+            
             if (use_rs1 && ex_latch.rd_idx == latch.rs1_idx) stall = true;
             if (use_rs2 && ex_latch.rd_idx == latch.rs2_idx) stall = true;
         }
     }
+
     if (stall) {
         last_stall_flag = true;
-        ID_EX_REG.push(ID_EX_Latch{}); // NOP挿入
-        return;
+        ID_EX_REG.push(ID_EX_Latch{}); // NOP (バブル) を挿入
+        // ★注意：ここで return する場合、呼び出し元（CPU::tickなど）で
+        // 「last_stall_flagがtrueなら、PCの更新とFetch(IF)ステージの実行を停止（維持）する」
+        // という処理が正しく実装されているか確認してください。
+        return; 
     }
 
     IF_ID_REG.pop();

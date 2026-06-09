@@ -155,11 +155,12 @@ void run_loop_test() {
 void run_load_binary_test(){
     CPU cpu;
     cpu.memory.load_binary("test.bin", 0x80000000);
+    std::string tmp;
     int cycle = 0;
     while (!cpu.is_halted() ) {
         cycle++;
         cpu.tick();
-        /*
+       // /*
        std::cout << std::hex << "Cycle " << std::setw(2) << cycle 
                   << "\n |  x1: " << std::setw(2) << cpu.get_register(1) 
                   << " |  x2: " << std::setw(2) << cpu.get_register(2) 
@@ -192,7 +193,8 @@ void run_load_binary_test(){
                   << " | x29: " << std::setw(2) << cpu.get_register(29) 
                   << " | x30: " << std::setw(2) << cpu.get_register(30) << "\n"
                   << " | x31: " << std::setw(2) << cpu.get_register(31) << "\n\n";
-       */ 
+     // */ 
+            std::cin >> tmp; // Enterで次のサイクルへ進む
     } 
     double ipc = static_cast<double>(cpu.retired_inst_count) / cycle;
     std::cout << "Execution finished in " << std::dec << cycle << " cycles.\n";

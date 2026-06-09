@@ -8,6 +8,10 @@
 
 class CPU {
 private:
+    // ExecuteStageから切り出す3つの戦略的ヘルパー関数
+    void resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1, uint32_t& alu_in2, uint32_t& store_val);
+    uint32_t calculate_alu(RiscV::ALU_OPS alu_op, uint32_t alu_in1, uint32_t alu_in2);
+    void evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t alu_result, bool& take_branch, uint32_t& target_pc);
     std::array<uint32_t, 32> registers;
     uint32_t pc;
     bool last_stall_flag = false;
@@ -42,7 +46,7 @@ public:
     uint64_t retired_inst_count = 0;
     void write_back();
     
-    uint32_t get_phys_addr(uint32_t addr) const;
+    //uint32_t get_phys_addr(uint32_t addr) const;
     void fetch() ;
     void tick() ;
 

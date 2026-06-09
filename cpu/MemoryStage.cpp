@@ -14,7 +14,13 @@ void CPU::memory_access() {
     nextlatch.pc = latch.pc;
     
     if(latch.ctrl.mem_read || latch.ctrl.mem_write) {
-        uint32_t addr = get_phys_addr(latch.alu_result);
+        //get_phys_addr is unnecessary because it is in the memory class, 
+        uint32_t addr = /*get_phys_addr*/(latch.alu_result);
+        std::cout << "[MEMORY ACCESS] " << (latch.ctrl.mem_read ? "READ" : "WRITE") 
+                  << " Addr: 0x" << std::hex << latch.alu_result 
+                  << " (Phys: 0x" << addr << ")"
+                  << " Size: " << ((latch.ctrl.mem_size == RiscV::MEM_SIZE::BYTE) ? "BYTE" : (latch.ctrl.mem_size == RiscV::MEM_SIZE::HALF) ? "HALF" : "WORD")
+                  << std::dec << std::endl;
         if (latch.ctrl.mem_write) {
             if (latch.alu_result == 0x10000000) { // UART
                 if (latch.ctrl.mem_size == RiscV::MEM_SIZE::BYTE) {
@@ -28,18 +34,18 @@ void CPU::memory_access() {
             } else {
                 switch(latch.ctrl.mem_size) {
                     case RiscV::MEM_SIZE::BYTE: 
-                        memory.write_byte(latch.alu_result,     latch.store_val & 0xFF);
+                        memory.write_byte(addr,     latch.store_val & 0xFF);
                     break;
                     case RiscV::MEM_SIZE::HALF:
-                        memory.write_byte(latch.alu_result,     latch.store_val & 0xFF);
-                        memory.write_byte(latch.alu_result + 1, (latch.store_val >> 8) & 0xFF);
+                        memory.write_byte(addr,     latch.store_val & 0xFF);
+                        memory.write_byte(addr + 1, (latch.store_val >> 8) & 0xFF);
                         break;
                     case RiscV::MEM_SIZE::WORD:
                         // MemoryStage.cpp の中（WORDストアの例）
-                        memory.write_byte(latch.alu_result,     latch.store_val & 0xFF);
-                        memory.write_byte(latch.alu_result + 1, (latch.store_val >> 8) & 0xFF);
-                        memory.write_byte(latch.alu_result + 2, (latch.store_val >> 16) & 0xFF);
-                        memory.write_byte(latch.alu_result + 3, (latch.store_val >> 24) & 0xFF);
+                        memory.write_byte(addr,     latch.store_val & 0xFF);
+                        memory.write_byte(addr + 1, (latch.store_val >> 8) & 0xFF);
+                        memory.write_byte(addr + 2, (latch.store_val >> 16) & 0xFF);
+                        memory.write_byte(addr + 3, (latch.store_val >> 24) & 0xFF);
                         break; 
                 }
             }
