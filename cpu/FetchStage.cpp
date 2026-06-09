@@ -3,7 +3,7 @@
 #include <iostream>
 void CPU::fetch() {
     if (pc < 0x80000000 || pc >= 0x80000000 + memory.size() - 3) return;
-    if (last_stall_flag) return; 
+    if (last_stall_flag) pc = last_actual_target; // 前回の分岐命令でストールしていた場合、PCを実際のターゲットに修正して再フェッチ 
     //get_phys_addr is unnecessary here 
     //because Memory class already handles the address translation and range checking. 
     //We can directly read from memory using the virtual address (pc) and let the Memory class take care of it.
@@ -20,9 +20,9 @@ void CPU::fetch() {
         pred_target = it->second.second;
     }
     RiscV::IF_ID_Latch latch = { inst, pc, pred_taken, pred_target };
-    std::cout << "IF: PC=0x" << std::hex << pc << " INST=0x" << inst 
-              << " PRED=" << (pred_taken ? "T" : "N") 
-              << " PRED_TGT=0x" << pred_target << std::dec << std::endl;
+    //std::cout << "IF: PC=0x" << std::hex << pc << " INST=0x" << inst 
+    //        << " PRED=" << (pred_taken ? "T" : "N") 
+    //        << " PRED_TGT=0x" << pred_target << std::dec << std::endl;
     IF_ID_REG.push(latch);
     pc = pred_target;
 }

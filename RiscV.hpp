@@ -50,8 +50,9 @@ namespace RiscV {
         uint32_t predicted_target{0};
     };
     struct ID_EX_Latch {
-        uint32_t val_rs1{0};
-        uint32_t val_rs2{0};
+        // これいらない説
+        //uint32_t val_rs1{0};
+        //uint32_t val_rs2{0};
         int32_t imm{0};
         uint32_t imm_unsigned{0};
         uint8_t rs1_idx{0};
@@ -84,11 +85,11 @@ namespace RiscV {
     // 符号拡張ユーティリティ
     inline int32_t sign_extension(uint32_t buf, uint32_t bits) {
         if (bits >= 32) return static_cast<int32_t>(buf);
-        uint32_t value = buf & ((1u << bits) - 1);
-        if (value & (1u << (bits - 1))) {
-            return static_cast<int32_t>(value | (~0u << bits));
-        }
-        return static_cast<int32_t>(value);
+        
+        // 一度、対象ビットの最上位が32ビット環境の符号ビット（bit 31）に来るまで左シフトする
+        // その後、int32_t にキャストして右シフトすることで、コンパイラが自動で符号拡張（算術右シフト）を行う
+        int32_t shift_amount = 32 - bits;
+        return (static_cast<int32_t>(buf << shift_amount)) >> shift_amount;
     }
     // --- 各ラッチのデバッグ出力 ---
 }

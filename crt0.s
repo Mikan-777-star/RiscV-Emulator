@@ -1,11 +1,21 @@
 .global _start
+.section .text
+
 _start:
-    # あなたのエミュレータのメモリサイズ(2MB)の末尾付近にスタックポインタ(x2)を設定
+    # スタックポインタの初期化
     li sp, 0x801FFFF0
     
-    # C言語の main 関数へジャンプ (JAL)
+    # main 関数を呼び出し
     call main
 
-    # mainから戻ってきたら、安全に無限ループして停止させる
-inf_loop:
-    j inf_loop
+    # main から戻ってきたら終了処理へ
+    # 0x10000004番地に1を書き込んでシャットダウン通知
+    li t0, 0x10000004
+    li t1, 1
+    sb t1, 0(t0)
+
+    # 念のための無限ループ（フォールバック）
+    # wfi命令でCPUを待機状態にするのがベストプラクティスよ
+halt_loop:
+    wfi
+    j halt_loop

@@ -14,6 +14,7 @@ private:
     void evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t alu_result, bool& take_branch, uint32_t& target_pc);
     std::array<uint32_t, 32> registers;
     uint32_t pc;
+    uint32_t last_actual_target = 0; // 
     bool last_stall_flag = false;
     bool halted = false;
     std::queue<RiscV::IF_ID_Latch> IF_ID_REG;
@@ -35,6 +36,8 @@ public:
     void set_pc(uint32_t new_pc) ;    
     bool is_id_ex_empty() const;
     RiscV::ID_EX_Latch get_id_ex_latch() const;
+    RiscV::EX_MEM_Latch get_ex_mem_latch() const;
+    RiscV::MEM_WB_Latch get_mem_wb_latch() const;
     uint32_t get_register(uint8_t rs);
     void  flush_pipeline();
     void reset_pipeline() ;
@@ -50,5 +53,5 @@ public:
     void fetch() ;
     void tick() ;
 
-    bool load_binary(const std::string& filename, uint32_t load_addr) ;
+    //bool load_binary(const std::string& filename, uint32_t load_addr) ;
 };

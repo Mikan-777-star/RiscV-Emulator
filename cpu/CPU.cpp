@@ -11,7 +11,7 @@ bool CPU::is_halted() { return halted; }
 void CPU::flush_pipeline() {
     IF_ID_REG = std::queue<RiscV::IF_ID_Latch>();
     ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
-    std::cout << "Pipeline flushed due to mispredicted branch.\n";
+    //std::cout << "Pipeline flushed due to mispredicted branch.\n";
 }
 
 void CPU::reset_pipeline() {
@@ -49,4 +49,6 @@ void CPU::set_register(uint8_t idx, uint32_t val) { if (idx != 0) registers[idx]
 void CPU::set_pc(uint32_t new_pc) { pc = new_pc; }
 bool CPU::is_id_ex_empty() const { return ID_EX_REG.empty(); }
 RiscV::ID_EX_Latch CPU::get_id_ex_latch() const { return ID_EX_REG.front(); }
+RiscV::EX_MEM_Latch CPU::get_ex_mem_latch() const { return EX_MEM_REG.front(); }
+RiscV::MEM_WB_Latch CPU::get_mem_wb_latch() const { return MEM_WB_REG.front(); }
 uint32_t CPU::get_register(uint8_t rs) { return registers[rs]; }
