@@ -2,9 +2,7 @@
 #include "RiscV.hpp"
 #include <iostream>
 void CPU::write_back() {
-    if (MEM_WB_REG.empty()) return;
-    auto latch = MEM_WB_REG.front();
-    MEM_WB_REG.pop();
+    auto latch = current_MEM_WB_REG;
     if (latch.ctrl.reg_write && latch.rd_idx != 0) {
         uint32_t write_data = 0;
         switch (latch.ctrl.wb_src) {

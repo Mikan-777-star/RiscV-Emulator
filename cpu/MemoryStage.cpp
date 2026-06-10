@@ -2,15 +2,13 @@
 #include "RiscV.hpp"
 #include <iostream>
 void CPU::memory_access() {
-    if(EX_MEM_REG.empty()) return;
-    auto latch = EX_MEM_REG.front();
-    EX_MEM_REG.pop();
+    auto latch = current_EX_MEM_REG;
     
-    RiscV::MEM_WB_Latch nextlatch{};
-    nextlatch.rd_idx = latch.rd_idx;
-    nextlatch.ctrl = latch.ctrl;
-    nextlatch.alu_result = latch.alu_result;
-    nextlatch.pc = latch.pc;
+    
+    next_MEM_WB_REG.rd_idx = latch.rd_idx;
+    next_MEM_WB_REG.ctrl = latch.ctrl;
+    next_MEM_WB_REG.alu_result = latch.alu_result;
+    next_MEM_WB_REG.pc = latch.pc;
     
     if(latch.ctrl.mem_read || latch.ctrl.mem_write) {
         //get_phys_addr is unnecessary because it is in the memory class, 
@@ -78,8 +76,7 @@ void CPU::memory_access() {
                           << " Size: " << ((latch.ctrl.mem_size == RiscV::MEM_SIZE::BYTE) ? "BYTE" : (latch.ctrl.mem_size == RiscV::MEM_SIZE::HALF) ? "HALF" : "WORD")
                           << std::dec << std::endl;
             }
-            nextlatch.mem_read_data = raw_data;
+            next_MEM_WB_REG.mem_read_data = raw_data;
         }
     }
-    MEM_WB_REG.push(nextlatch);
 }

@@ -50,9 +50,8 @@ namespace RiscV {
         uint32_t predicted_target{0};
     };
     struct ID_EX_Latch {
-        // これいらない説
-        //uint32_t val_rs1{0};
-        //uint32_t val_rs2{0};
+        uint32_t val_rs1{0};
+        uint32_t val_rs2{0};
         int32_t imm{0};
         uint32_t imm_unsigned{0};
         uint8_t rs1_idx{0};

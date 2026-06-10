@@ -12,17 +12,17 @@ private:
     void resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1, uint32_t& alu_in2, uint32_t& store_val);
     uint32_t calculate_alu(RiscV::ALU_OPS alu_op, uint32_t alu_in1, uint32_t alu_in2);
     void evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t alu_result, bool& take_branch, uint32_t& target_pc);
-    std::array<uint32_t, 32> registers;
+    uint32_t registers[32];
     uint32_t pc;
     uint32_t last_actual_target = 0; // 
     bool different_flag = false;
     uint32_t last_stall_pc = 0;
     bool last_stall_flag = false;
     bool halted = false;
-    std::queue<RiscV::IF_ID_Latch> IF_ID_REG;
-    std::queue<RiscV::ID_EX_Latch> ID_EX_REG;
-    std::queue<RiscV::EX_MEM_Latch> EX_MEM_REG;
-    std::queue<RiscV::MEM_WB_Latch> MEM_WB_REG;
+    RiscV::IF_ID_Latch current_IF_ID_REG, next_IF_ID_REG;
+    RiscV::ID_EX_Latch current_ID_EX_REG, next_ID_EX_REG;
+    RiscV::EX_MEM_Latch current_EX_MEM_REG, next_EX_MEN_REG;
+    RiscV::MEM_WB_Latch current_MEM_WB_REG, next_MEM_WB_REG;
     // キー: 分岐命令のPC
     // 値: {2ビットカウンタ(0~3), ターゲットPC}
     std::unordered_map<uint32_t, std::pair<uint8_t, uint32_t>> branch_predictor;
