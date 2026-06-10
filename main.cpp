@@ -161,11 +161,11 @@ void run_load_binary_test(){
         cycle++;
         //std::cout << "Cycle " << std::setw(2) << cycle << "\n";
         cpu.tick();
-        if(cycle > 1000){
+        if(cycle > 30){
             std::cout << "timeout" << std::endl;
             return;
         }
-        /*std::cout << "Cycle " << std::setw(2) << cycle << "| IF: " << std::hex << cpu.get_id_ex_latch().pc <<
+        std::cout << "Cycle " << std::setw(2) << cycle << "| IF: " << std::hex << cpu.get_id_ex_latch().pc <<
                                                          " | EX: "<<cpu.get_ex_mem_latch().pc <<
                                                          " | MEM: "<<cpu.get_mem_wb_latch().pc << std::dec << "\n";
         
@@ -201,7 +201,7 @@ void run_load_binary_test(){
                   << " | x29: " << std::setw(2) << cpu.get_register(29) 
                   << " | x30: " << std::setw(2) << cpu.get_register(30) << "\n"
                   << " | x31: " << std::setw(2) << cpu.get_register(31) << "\n\n";
-      */ 
+       
            // std::cin >> tmp; // Enterで次のサイクルへ進む
     } 
     double ipc = static_cast<double>(cpu.retired_inst_count) / cycle;

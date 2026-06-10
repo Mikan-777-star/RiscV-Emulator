@@ -80,8 +80,8 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
 
     // 優先度1: MEMステージからのフォワーディング (1つ前の命令・こちらが最新なので上書きする)
     if (!EX_MEM_REG.empty()) {
-        auto mem_latch = EX_MEM_REG.back(); 
-        if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0) {
+        auto mem_latch = EX_MEM_REG.front(); 
+        if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0 && !mem_latch.ctrl.mem_read) {
 
             // フォワーディングするべき正しいデータを判定する
             uint32_t forward_data = mem_latch.alu_result;
@@ -138,7 +138,7 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
 
         // 分岐比較用のフォワーディング
         if (!MEM_WB_REG.empty()) {
-            auto mem_wb_latch = MEM_WB_REG.back();
+            auto mem_wb_latch = MEM_WB_REG.front();
             if (mem_wb_latch.ctrl.reg_write && mem_wb_latch.rd_idx != 0) {
                 uint32_t fw_val = (mem_wb_latch.ctrl.wb_src == WB_SRC::ALU) ? mem_wb_latch.alu_result :
                                   (mem_wb_latch.ctrl.wb_src == WB_SRC::PC4) ? mem_wb_latch.pc + 4 : mem_wb_latch.mem_read_data;

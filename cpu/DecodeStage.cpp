@@ -5,7 +5,6 @@ void CPU::decode() {
     using namespace RiscV;
     last_stall_flag = false;
     if (IF_ID_REG.empty()) return;
-    
     auto firstlatch = IF_ID_REG.front();
     ID_EX_Latch latch{}; 
     uint32_t inst = firstlatch.inst;
@@ -16,12 +15,13 @@ void CPU::decode() {
     latch.rs1_idx = (inst >> 15) & 0x1f;
     latch.rs2_idx = (inst >> 20) & 0x1f;
     latch.rd_idx = (inst >> 7) & 0x1f;
-    //latch.val_rs1 = registers[latch.rs1_idx];
-    //latch.val_rs2 = registers[latch.rs2_idx];
     latch.pc = firstlatch.pc;
     latch.predicted_taken = firstlatch.predicted_taken;
     latch.predicted_target = firstlatch.predicted_target;
-
+   // if(latch.pc == 0x8000008c){
+       std::cout << latch.pc <<" : " << disassemble_riscv(inst) << std::endl;
+      // std::exit(1);
+    //}
     switch (opcode) {
         
     case OP_RType:
@@ -126,39 +126,23 @@ void CPU::decode() {
         latch.ctrl.is_fence = true;
         break;
     }
-    
     // --- ストール判定 ---
-    // //　と思ったが、この時点でストール必要がないんじゃあないか？　
-    // if(!MEM_WB_REG.empty()) {
-    //     auto wb_latch = MEM_WB_REG.front();
-    //     if (wb_latch.ctrl.mem_read && wb_latch.rd_idx != 0) {
-    //         bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
-    //         bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
-            
-    //         if (use_rs1 && wb_latch.rd_idx == latch.rs1_idx){
-    //             latch.val_rs1 = wb_latch.alu_result; // フォワーディングで最新の値をセットしてからストール判定
-    //         };
-    //         if (use_rs2 && wb_latch.rd_idx == latch.rs2_idx){
-    //             latch.val_rs2 = wb_latch.alu_result; // フォワーディングで最新の値をセットしてからストール判定
-    //         };
-    //     }
-    // }
-    // if (!EX_MEM_REG.empty()) {
-    //     auto ex_latch = EX_MEM_REG.back(); // ※お使いの設計に合わせてfront/backは要確認
-    //     if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {
-    //         // ★修正：JALRはRS1を使用するが、JALはRS1を使用しない
-    //        // DecodeStage.cpp のストール判定部分
-    //         bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
-    //         bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
-            
-    //         if (use_rs1 && ex_latch.rd_idx == latch.rs1_idx){
-    //             latch.val_rs1 = ex_latch.alu_result; // フォワーディングで最新の値をセットしてからストール判定
-    //         }
-    //         if (use_rs2 && ex_latch.rd_idx == latch.rs2_idx){
-    //             latch.val_rs2 = ex_latch.alu_result; // フォワーディングで最新の値をセットしてからストール判定
-    //         }
-    //     }
-    // }
+
+    
+    if (!EX_MEM_REG.empty()) {
+        auto ex_latch = EX_MEM_REG.front(); // ※お使いの設計に合わせてfront/backは要確認
+        if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {         
+            bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
+            bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
+            if((use_rs1 && (latch.rs1_idx == ex_latch.rd_idx)) || (use_rs2 && (latch.rs2_idx == ex_latch.rd_idx))){
+                ID_EX_REG.push({});
+                std::cout << "stall \n";
+                last_stall_flag = true;
+                last_stall_pc = latch.pc;
+                return;
+            }
+        }
+    }
     IF_ID_REG.pop();
     ID_EX_REG.push(latch);
 }

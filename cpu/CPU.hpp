@@ -16,6 +16,7 @@ private:
     uint32_t pc;
     uint32_t last_actual_target = 0; // 
     bool different_flag = false;
+    uint32_t last_stall_pc = 0;
     bool last_stall_flag = false;
     bool halted = false;
     std::queue<RiscV::IF_ID_Latch> IF_ID_REG;
@@ -53,6 +54,7 @@ public:
     //uint32_t get_phys_addr(uint32_t addr) const;
     void fetch() ;
     void tick() ;
+    std::string disassemble_riscv(uint32_t inst);
 
     //bool load_binary(const std::string& filename, uint32_t load_addr) ;
 };

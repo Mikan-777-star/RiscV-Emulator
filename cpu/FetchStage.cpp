@@ -3,10 +3,16 @@
 #include <iostream>
 void CPU::fetch() {
     if (pc < 0x80000000 || pc >= 0x80000000 + memory.size() - 3) return;
+    if(last_stall_flag){
+        //std::cout << "last stall\n";
+        pc = last_stall_pc;
+        return;
+    }
     if(different_flag){
         pc = last_actual_target;
         different_flag = false;
     }
+
     //get_phys_addr is unnecessary here 
     //because Memory class already handles the address translation and range checking. 
     //We can directly read from memory using the virtual address (pc) and let the Memory class take care of it.
