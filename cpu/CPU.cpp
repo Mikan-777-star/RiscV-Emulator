@@ -14,21 +14,12 @@ CPU::CPU() : registers({0}),  pc(0x80000000), memory() {
 bool CPU::is_halted() { return halted; }
 
 void CPU::flush_pipeline() {
-    IF_ID_REG = std::queue<RiscV::IF_ID_Latch>();
-    ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
+    current_IF_ID_REG = RiscV::IF_ID_Latch();
+    current_ID_EX_REG = RiscV::ID_EX_Latch();
     //std::cout << "Pipeline flushed due to mispredicted branch.\n";
 }
 
-void CPU::reset_pipeline() {
-    IF_ID_REG = std::queue<RiscV::IF_ID_Latch>();
-    ID_EX_REG = std::queue<RiscV::ID_EX_Latch>();
-    EX_MEM_REG = std::queue<RiscV::EX_MEM_Latch>();
-    MEM_WB_REG = std::queue<RiscV::MEM_WB_Latch>();
-    registers.fill(0);
-    uint32_t mem_size = 1024 * 1024 * 2; // あなたの現在のメモリサイズ
-    registers[2] = 0x80000000 + mem_size;
-    pc = 0x80000000;
-}
+
 
 void CPU::tick() {
     write_back();
@@ -41,6 +32,10 @@ void CPU::tick() {
     //std::cout << "After decode: PC=" << std::hex << pc << std::dec << std::endl;
     fetch();
     //std::cout << "After fetch: PC=" << std::hex << pc << std::dec << std::endl;
+    current_IF_ID_REG = next_IF_ID_REG;
+    current_ID_EX_REG = next_ID_EX_REG;
+    current_EX_MEM_REG = next_EX_MEN_REG;
+    current_MEM_WB_REG = next_MEM_WB_REG;
 }
 
 // テスト用・ヘルパー関数
@@ -50,19 +45,9 @@ void CPU::write_memory_word(uint32_t load_addr, uint32_t inst) {
     memory.write_byte(load_addr + 2, (inst >> 16) & 0xff);
     memory.write_byte(load_addr + 3, (inst >> 24) & 0xff);
 }
-void CPU::inject_instruction(uint32_t inst) { RiscV::IF_ID_Latch latch = {inst, pc}; pc += 4; IF_ID_REG.push(latch); }
 void CPU::set_register(uint8_t idx, uint32_t val) { if (idx != 0) registers[idx] = val; }
 void CPU::set_pc(uint32_t new_pc) { pc = new_pc; }
-bool CPU::is_id_ex_empty() const { return ID_EX_REG.empty(); }
-RiscV::ID_EX_Latch CPU::get_id_ex_latch() const { 
-    return ID_EX_REG.empty() ? RiscV::ID_EX_Latch{} : ID_EX_REG.front(); 
-}
-RiscV::EX_MEM_Latch CPU::get_ex_mem_latch() const { 
-    return EX_MEM_REG.empty() ? RiscV::EX_MEM_Latch{} : EX_MEM_REG.front(); 
-}
-RiscV::MEM_WB_Latch CPU::get_mem_wb_latch() const { 
-    return MEM_WB_REG.empty() ? RiscV::MEM_WB_Latch{} : MEM_WB_REG.front(); 
-}
+
 uint32_t CPU::get_register(uint8_t rs) { return registers[rs]; }
 
 std::string CPU::disassemble_riscv(uint32_t inst) {

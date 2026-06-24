@@ -78,5 +78,6 @@ void CPU::memory_access() {
             }
             next_MEM_WB_REG.mem_read_data = raw_data;
         }
+        
     }
 }

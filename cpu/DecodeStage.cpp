@@ -4,8 +4,8 @@
 void CPU::decode() {
     using namespace RiscV;
     last_stall_flag = false;
-    if (IF_ID_REG.empty()) return;
-    auto firstlatch = IF_ID_REG.front();
+    //if (IF_ID_REG.empty()) return;
+    auto firstlatch = current_IF_ID_REG;
     ID_EX_Latch latch{}; 
     uint32_t inst = firstlatch.inst;
     uint8_t opcode = inst & 0x7f;
@@ -129,20 +129,19 @@ void CPU::decode() {
     // --- ストール判定 ---
 
     
-    if (!EX_MEM_REG.empty()) {
-        auto ex_latch = EX_MEM_REG.front(); // ※お使いの設計に合わせてfront/backは要確認
-        if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {         
-            bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
-            bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
-            if((use_rs1 && (latch.rs1_idx == ex_latch.rd_idx)) || (use_rs2 && (latch.rs2_idx == ex_latch.rd_idx))){
-                ID_EX_REG.push({});
-                std::cout << "stall \n";
-                last_stall_flag = true;
-                last_stall_pc = latch.pc;
-                return;
-            }
+    auto ex_latch = next_EX_MEN_REG; // ※お使いの設計に合わせてfront/backは要確認
+    if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {         
+        bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
+        bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
+        if((use_rs1 && (latch.rs1_idx == ex_latch.rd_idx)) || (use_rs2 && (latch.rs2_idx == ex_latch.rd_idx))){
+            next_ID_EX_REG = RiscV::ID_EX_Latch();
+            std::cout << "stall \n";
+            last_stall_flag = true;
+            last_stall_pc = latch.pc;
+            next_IF_ID_REG = firstlatch;
+            return;
         }
     }
-    IF_ID_REG.pop();
-    ID_EX_REG.push(latch);
+    
+    next_ID_EX_REG = latch;
 }

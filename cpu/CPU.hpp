@@ -33,16 +33,10 @@ public:
     bool is_halted();
     // テスト用のインターフェース（内部状態を外からいじるためのもの）
     void write_memory_word(uint32_t load_addr, uint32_t inst);
-    void inject_instruction(uint32_t inst) ;
     void set_register(uint8_t idx, uint32_t val);
     void set_pc(uint32_t new_pc) ;    
-    bool is_id_ex_empty() const;
-    RiscV::ID_EX_Latch get_id_ex_latch() const;
-    RiscV::EX_MEM_Latch get_ex_mem_latch() const;
-    RiscV::MEM_WB_Latch get_mem_wb_latch() const;
     uint32_t get_register(uint8_t rs);
     void  flush_pipeline();
-    void reset_pipeline() ;
 
     void decode();
 

@@ -1,6 +1,6 @@
 #include "CPU.hpp"
 #include "RiscV.hpp"
-#include <iostream>
+//#include <iostream>
 void CPU::fetch() {
     if (pc < 0x80000000 || pc >= 0x80000000 + memory.size() - 3) return;
     if(last_stall_flag){
@@ -32,6 +32,6 @@ void CPU::fetch() {
     //std::cout << "IF: PC=0x" << std::hex << pc << " INST=0x" << inst 
     //        << " PRED=" << (pred_taken ? "T" : "N") 
     //        << " PRED_TGT=0x" << pred_target << std::dec << std::endl;
-    IF_ID_REG.push(latch);
+    next_IF_ID_REG = latch;
     pc = pred_target;
 }

@@ -2,46 +2,7 @@
 #include "RiscV.hpp"
 #include <iostream>
 
-// 1. フォワーディングの解決（最新の値をバイパス）
-// void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1, uint32_t& alu_in2, uint32_t& store_val) {
-//     std::cout << "DEBUG EX: latch.rs2_idx = " << (int)latch.rs1_idx 
-//           << ", latch.val_rs2 = 0x" << std::hex << latch.val_rs2 << std::dec << std::endl;
-//     using namespace RiscV;
-//     std::cout << "Resolving forwarding for EX stage: RS1=" << static_cast<int>(latch.rs1_idx) 
-//               << " RS2=" << static_cast<int>(latch.rs2_idx) 
-//               << " RD=" << static_cast<int>(latch.rd_idx) << std::endl;
-//     // 初期値のセット
-//     switch (latch.ctrl.src1_sel) {
-//         case ALU_SRC1::RS1:  alu_in1 = latch.val_rs1; break;
-//         case ALU_SRC1::PC:   alu_in1 = latch.pc; break;
-//         case ALU_SRC1::ZERO: alu_in1 = 0; break;
-//     }
-//     switch (latch.ctrl.src2_sel) {
-//         case ALU_SRC2::RS2: alu_in2 = latch.val_rs2; break;
-//         case ALU_SRC2::IMM: alu_in2 = static_cast<uint32_t>(latch.imm); break;
-//     }
-//     store_val = latch.val_rs2;
 
-//     // 優先度1: WBステージ（すでに registers に書き込まれている最新値の取得）
-//     if (latch.ctrl.src1_sel == ALU_SRC1::RS1) alu_in1 = registers[latch.rs1_idx];
-//     if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = registers[latch.rs2_idx];
-//     if (latch.ctrl.mem_write) store_val = registers[latch.rs2_idx];
-
-//     // 優先度2: MEMステージ (MEM_WB_REG の最新結果で上書き)
-//     if (!MEM_WB_REG.empty()) {
-//         auto mem_wb_latch = MEM_WB_REG.back();
-//         if (mem_wb_latch.ctrl.reg_write && mem_wb_latch.rd_idx != 0) {
-//             uint32_t fw_val = 0;
-//             if (mem_wb_latch.ctrl.wb_src == WB_SRC::ALU) fw_val = mem_wb_latch.alu_result;
-//             else if (mem_wb_latch.ctrl.wb_src == WB_SRC::PC4) fw_val = mem_wb_latch.pc + 4;
-//             else fw_val = mem_wb_latch.mem_read_data;
-
-//             if (latch.ctrl.src1_sel == ALU_SRC1::RS1 && mem_wb_latch.rd_idx == latch.rs1_idx) alu_in1 = fw_val;
-//             if (latch.ctrl.src2_sel == ALU_SRC2::RS2 && mem_wb_latch.rd_idx == latch.rs2_idx) alu_in2 = fw_val;
-//             if (latch.ctrl.mem_write && mem_wb_latch.rd_idx == latch.rs2_idx) store_val = fw_val;
-//         }
-//     }
-// }
 void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1, uint32_t& alu_in2, uint32_t& store_val) {
     using namespace RiscV;
     
@@ -61,42 +22,39 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
 
     // 優先度2: WBステージからのフォワーディング (2つ前の命令)
     // ※具体的な変数名（MEM_WB_REGのフロントなど）はお使いのコードに合わせてください
-    if (!MEM_WB_REG.empty()) {
-        auto wb_latch = MEM_WB_REG.front();
-        if (wb_latch.ctrl.reg_write && wb_latch.rd_idx != 0) {
-            uint32_t wb_data = 0;
-            switch (wb_latch.ctrl.wb_src) {
-                case WB_SRC::ALU: wb_data = wb_latch.alu_result; break;
-                case WB_SRC::MEM: wb_data = wb_latch.mem_read_data; break;
-                case WB_SRC::PC4: wb_data = wb_latch.pc + 4; break;
-            }
-            if (wb_latch.rd_idx == latch.rs1_idx) alu_in1 = wb_data;
-            if (wb_latch.rd_idx == latch.rs2_idx) {
-                if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = wb_data;
-                store_val = wb_data; // ✨修正: ストアデータもフォワーディング
-            }
+    
+    auto wb_latch = next_MEM_WB_REG;
+    if (wb_latch.ctrl.reg_write && wb_latch.rd_idx != 0) {
+        uint32_t wb_data = 0;
+        switch (wb_latch.ctrl.wb_src) {
+            case WB_SRC::ALU: wb_data = wb_latch.alu_result; break;
+            case WB_SRC::MEM: wb_data = wb_latch.mem_read_data; break;
+            case WB_SRC::PC4: wb_data = wb_latch.pc + 4; break;
+        }
+        if (wb_latch.rd_idx == latch.rs1_idx) alu_in1 = wb_data;
+        if (wb_latch.rd_idx == latch.rs2_idx) {
+            if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = wb_data;
+            store_val = wb_data; // ✨修正: ストアデータもフォワーディング
         }
     }
+    
 
     // 優先度1: MEMステージからのフォワーディング (1つ前の命令・こちらが最新なので上書きする)
-    if (!EX_MEM_REG.empty()) {
-        auto mem_latch = EX_MEM_REG.front(); 
-        if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0 && !mem_latch.ctrl.mem_read) {
-
-            // フォワーディングするべき正しいデータを判定する
-            uint32_t forward_data = mem_latch.alu_result;
-            if (mem_latch.ctrl.wb_src == WB_SRC::PC4) {
-                forward_data = mem_latch.pc + 4; // ✨ JAL/JALRの戻り先アドレス（PC+4）を正しくフォワーディング
+    
+    auto mem_latch = next_EX_MEN_REG; 
+    if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0 && !mem_latch.ctrl.mem_read) {
+        // フォワーディングするべき正しいデータを判定する
+        uint32_t forward_data = mem_latch.alu_result;
+        if (mem_latch.ctrl.wb_src == WB_SRC::PC4) {
+            forward_data = mem_latch.pc + 4; // ✨ JAL/JALRの戻り先アドレス（PC+4）を正しくフォワーディング
+        }
+        if (!mem_latch.ctrl.mem_read) { // LOAD命令以外の場合
+            if (mem_latch.rd_idx == latch.rs1_idx) {
+                alu_in1 = forward_data; // ✨ 正しい戻り先アドレスがJALRのベースに入る！
             }
-
-            if (!mem_latch.ctrl.mem_read) { // LOAD命令以外の場合
-                if (mem_latch.rd_idx == latch.rs1_idx) {
-                    alu_in1 = forward_data; // ✨ 正しい戻り先アドレスがJALRのベースに入る！
-                }
-                if (mem_latch.rd_idx == latch.rs2_idx) {
-                    if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = forward_data;
-                    store_val = forward_data;
-                }
+            if (mem_latch.rd_idx == latch.rs2_idx) {
+                if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = forward_data;
+                store_val = forward_data;
             }
         }
     }
@@ -137,14 +95,13 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
         int32_t r2 = static_cast<int32_t>(registers[latch.rs2_idx]);
 
         // 分岐比較用のフォワーディング
-        if (!MEM_WB_REG.empty()) {
-            auto mem_wb_latch = MEM_WB_REG.front();
-            if (mem_wb_latch.ctrl.reg_write && mem_wb_latch.rd_idx != 0) {
-                uint32_t fw_val = (mem_wb_latch.ctrl.wb_src == WB_SRC::ALU) ? mem_wb_latch.alu_result :
-                                  (mem_wb_latch.ctrl.wb_src == WB_SRC::PC4) ? mem_wb_latch.pc + 4 : mem_wb_latch.mem_read_data;
-                if (latch.rs1_idx == mem_wb_latch.rd_idx) r1 = fw_val;
-                if (latch.rs2_idx == mem_wb_latch.rd_idx) r2 = fw_val;
-            }
+        
+        auto mem_wb_latch = next_MEM_WB_REG;
+        if (mem_wb_latch.ctrl.reg_write && mem_wb_latch.rd_idx != 0) {
+            uint32_t fw_val = (mem_wb_latch.ctrl.wb_src == WB_SRC::ALU) ? mem_wb_latch.alu_result :
+                              (mem_wb_latch.ctrl.wb_src == WB_SRC::PC4) ? mem_wb_latch.pc + 4 : mem_wb_latch.mem_read_data;
+            if (latch.rs1_idx == mem_wb_latch.rd_idx) r1 = fw_val;
+            if (latch.rs2_idx == mem_wb_latch.rd_idx) r2 = fw_val;
         }
 
         switch (latch.ctrl.branch_op) {
@@ -178,6 +135,7 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
             different_flag = true;
             last_actual_target = actual_target; // 予測が外れたときの正しいターゲットPCを保存
             //std::cout << "actual_target: " <<std::hex << actual_target << std::dec << "\n"; 
+            
             flush_pipeline();
         }
     }
@@ -185,10 +143,10 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
 
 // 司令塔となるメインの execute ステージ
 void CPU::execute() {
-    if (ID_EX_REG.empty()) return;
+    //if (ID_EX_REG.empty()) return;
 
-    RiscV::ID_EX_Latch latch = ID_EX_REG.front();
-    ID_EX_REG.pop();
+    RiscV::ID_EX_Latch latch = current_ID_EX_REG;//ID_EX_REG.front();
+    //ID_EX_REG.pop();
 
     RiscV::EX_MEM_Latch nextlatch{};
     nextlatch.rd_idx = latch.rd_idx;
@@ -215,8 +173,12 @@ void CPU::execute() {
         if (registers[17] == 93) {
             std::cout << "ECALL: Exit requested. Status: " << registers[10] << std::endl;
             exit(0);
+        }else{
+            std::cout << "ECALL : NOT FOUND" << std::endl;
         }
+    }else if (latch.ctrl.is_ebreak){
+        std::cout << "EBRAKE" << std::endl;
     }
 
-    EX_MEM_REG.push(nextlatch);
+    next_EX_MEN_REG = nextlatch;
 }
