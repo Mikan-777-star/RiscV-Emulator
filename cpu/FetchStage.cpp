@@ -6,6 +6,7 @@ void CPU::fetch() {
     if(last_stall_flag){
         //std::cout << "last stall\n";
         pc = last_stall_pc;
+        next_IF_ID_REG = RiscV::IF_ID_Latch();
         return;
     }
     if(different_flag){

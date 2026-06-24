@@ -23,7 +23,7 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
     // 優先度2: WBステージからのフォワーディング (2つ前の命令)
     // ※具体的な変数名（MEM_WB_REGのフロントなど）はお使いのコードに合わせてください
     
-    auto wb_latch = next_MEM_WB_REG;
+    auto wb_latch = current_MEM_WB_REG;
     if (wb_latch.ctrl.reg_write && wb_latch.rd_idx != 0) {
         uint32_t wb_data = 0;
         switch (wb_latch.ctrl.wb_src) {
@@ -41,7 +41,7 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
 
     // 優先度1: MEMステージからのフォワーディング (1つ前の命令・こちらが最新なので上書きする)
     
-    auto mem_latch = next_EX_MEN_REG; 
+    auto mem_latch = current_EX_MEM_REG; 
     if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0 && !mem_latch.ctrl.mem_read) {
         // フォワーディングするべき正しいデータを判定する
         uint32_t forward_data = mem_latch.alu_result;
@@ -95,13 +95,37 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
         int32_t r2 = static_cast<int32_t>(registers[latch.rs2_idx]);
 
         // 分岐比較用のフォワーディング
-        
-        auto mem_wb_latch = next_MEM_WB_REG;
-        if (mem_wb_latch.ctrl.reg_write && mem_wb_latch.rd_idx != 0) {
-            uint32_t fw_val = (mem_wb_latch.ctrl.wb_src == WB_SRC::ALU) ? mem_wb_latch.alu_result :
-                              (mem_wb_latch.ctrl.wb_src == WB_SRC::PC4) ? mem_wb_latch.pc + 4 : mem_wb_latch.mem_read_data;
-            if (latch.rs1_idx == mem_wb_latch.rd_idx) r1 = fw_val;
-            if (latch.rs2_idx == mem_wb_latch.rd_idx) r2 = fw_val;
+        auto mem_latch = current_EX_MEM_REG; // かならず current_ を見ること
+        if (mem_latch.ctrl.reg_write && mem_latch.rd_idx != 0) {
+            uint32_t fw_val = mem_latch.alu_result;
+            if (mem_latch.ctrl.wb_src == WB_SRC::PC4) {
+                fw_val = mem_latch.pc + 4; // JAL/JALRの戻り先アドレス
+            }
+            
+            // LOAD命令（mem_read）の場合はEXステージでデータが間に合わないので、
+            // 本来はDecodeでストールさせる必要があるわ（バグ1で指摘した点よ）。
+            if (!mem_latch.ctrl.mem_read) { 
+                if (latch.rs1_idx == mem_latch.rd_idx) r1 = static_cast<int32_t>(fw_val);
+                if (latch.rs2_idx == mem_latch.rd_idx) r2 = static_cast<int32_t>(fw_val);
+            }
+        }
+
+        // =================================================================
+        // 優先度2：2つ前の命令（WBステージ：current_MEM_WB_REG）からのフォワーディング
+        // =================================================================
+        // ※あなたの元のコード（next_MEM_WB_REGを見ていた部分）を current_ に修正したものよ
+        auto wb_latch = current_MEM_WB_REG; 
+        if (wb_latch.ctrl.reg_write && wb_latch.rd_idx != 0) {
+            uint32_t fw_val = (wb_latch.ctrl.wb_src == WB_SRC::ALU) ? wb_latch.alu_result :
+                              (wb_latch.ctrl.wb_src == WB_SRC::PC4) ? wb_latch.pc + 4 : wb_latch.mem_read_data;
+            
+            // 1つ前の命令（優先度1）で上書きされていない場合のみ、2つ前の値を適用する
+            if (latch.rs1_idx == wb_latch.rd_idx && (current_EX_MEM_REG.rd_idx != latch.rs1_idx || current_EX_MEM_REG.ctrl.mem_read || !current_EX_MEM_REG.ctrl.reg_write)) {
+                r1 = static_cast<int32_t>(fw_val);
+            }
+            if (latch.rs2_idx == wb_latch.rd_idx && (current_EX_MEM_REG.rd_idx != latch.rs2_idx || current_EX_MEM_REG.ctrl.mem_read || !current_EX_MEM_REG.ctrl.reg_write)) {
+                r2 = static_cast<int32_t>(fw_val);
+            }
         }
 
         switch (latch.ctrl.branch_op) {
@@ -144,10 +168,16 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
 // 司令塔となるメインの execute ステージ
 void CPU::execute() {
     //if (ID_EX_REG.empty()) return;
-
+    
     RiscV::ID_EX_Latch latch = current_ID_EX_REG;//ID_EX_REG.front();
     //ID_EX_REG.pop();
-
+    bool is_bubble = (!latch.ctrl.reg_write && !latch.ctrl.mem_read && !latch.ctrl.mem_write && 
+                      !latch.ctrl.is_branch && !latch.ctrl.is_jump && !latch.ctrl.is_ecall);
+                      
+    if (is_bubble) {
+        next_EX_MEM_REG = RiscV::EX_MEM_Latch(); // 次のステージへバブルを流す
+        return; // 早期リターンして、古い分岐判定や registers[0] の誤評価を防ぐ！
+    }
     RiscV::EX_MEM_Latch nextlatch{};
     nextlatch.rd_idx = latch.rd_idx;
     nextlatch.ctrl = latch.ctrl;
@@ -180,5 +210,5 @@ void CPU::execute() {
         std::cout << "EBRAKE" << std::endl;
     }
 
-    next_EX_MEN_REG = nextlatch;
+    next_EX_MEM_REG = nextlatch;
 }

@@ -29,7 +29,7 @@ void CPU::memory_access() {
                 }
                 //std::string tmp;
                 //std::cin >> tmp; // Enterで次のサイクルへ進む
-            } else if (latch.alu_result >= 0x10000001 && latch.alu_result <= 0x1FFFFFFF) { // Halt
+            } else if (latch.alu_result == 0x10000004 ) { // Halt
                 std::cout << "\n[SYSTEM] Halt signal received. Shutting down..." << std::endl;
                 halted = true;
             } else {

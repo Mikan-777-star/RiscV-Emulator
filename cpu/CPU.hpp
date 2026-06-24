@@ -21,7 +21,7 @@ private:
     bool halted = false;
     RiscV::IF_ID_Latch current_IF_ID_REG, next_IF_ID_REG;
     RiscV::ID_EX_Latch current_ID_EX_REG, next_ID_EX_REG;
-    RiscV::EX_MEM_Latch current_EX_MEM_REG, next_EX_MEN_REG;
+    RiscV::EX_MEM_Latch current_EX_MEM_REG, next_EX_MEM_REG;
     RiscV::MEM_WB_Latch current_MEM_WB_REG, next_MEM_WB_REG;
     // キー: 分岐命令のPC
     // 値: {2ビットカウンタ(0~3), ターゲットPC}

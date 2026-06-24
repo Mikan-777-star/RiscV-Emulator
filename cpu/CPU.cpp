@@ -34,7 +34,7 @@ void CPU::tick() {
     //std::cout << "After fetch: PC=" << std::hex << pc << std::dec << std::endl;
     current_IF_ID_REG = next_IF_ID_REG;
     current_ID_EX_REG = next_ID_EX_REG;
-    current_EX_MEM_REG = next_EX_MEN_REG;
+    current_EX_MEM_REG = next_EX_MEM_REG;
     current_MEM_WB_REG = next_MEM_WB_REG;
 }
 

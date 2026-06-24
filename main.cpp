@@ -24,10 +24,10 @@ void run_load_binary_test(){
         cycle++;
         //std::cout << "Cycle " << std::setw(2) << cycle << "\n";
         cpu.tick();
-        if(cycle > 100){
-            std::cout << "time out" << std::endl;
-            break;
-        } 
+        //  if(cycle > 1000){
+        //      std::cout << "time out" << std::endl;
+        //      break;
+        //  } 
     //    std::cout << std::hex << "Cycle " << std::setw(2) << cycle 
     //               << "\n |  x1: " << std::setw(2) << cpu.get_register(1) 
     //               << " |  x2: " << std::setw(2) << cpu.get_register(2) 

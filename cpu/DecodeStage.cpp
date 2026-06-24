@@ -19,7 +19,7 @@ void CPU::decode() {
     latch.predicted_taken = firstlatch.predicted_taken;
     latch.predicted_target = firstlatch.predicted_target;
    // if(latch.pc == 0x8000008c){
-       std::cout << latch.pc <<" : " << disassemble_riscv(inst) << std::endl;
+       //std::cout << latch.pc <<" : " << disassemble_riscv(inst) << std::endl;
       // std::exit(1);
     //}
     switch (opcode) {
@@ -129,13 +129,13 @@ void CPU::decode() {
     // --- ストール判定 ---
 
     
-    auto ex_latch = next_EX_MEN_REG; // ※お使いの設計に合わせてfront/backは要確認
+    auto ex_latch = current_ID_EX_REG; // ※お使いの設計に合わせてfront/backは要確認
     if (ex_latch.ctrl.mem_read && ex_latch.rd_idx != 0) {         
         bool use_rs1 = (latch.ctrl.src1_sel == ALU_SRC1::RS1 || latch.ctrl.is_branch || opcode == OP_JALR); 
         bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
         if((use_rs1 && (latch.rs1_idx == ex_latch.rd_idx)) || (use_rs2 && (latch.rs2_idx == ex_latch.rd_idx))){
             next_ID_EX_REG = RiscV::ID_EX_Latch();
-            std::cout << "stall \n";
+            //std::cout << "stall \n";
             last_stall_flag = true;
             last_stall_pc = latch.pc;
             next_IF_ID_REG = firstlatch;
