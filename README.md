@@ -1,42 +1,92 @@
-# RiscV-Emulator
+# RISC-V (RV32I) 5-Stage Pipeline Emulator
 
-A lightweight pipeline Risc-V architecture emulator written in pure C++ from scratch. 
-This project is developed to deeply understand computer architecture  and low-level software/hardware interfaces.
+A cycle-accurate RISC-V (RV32I) 5-stage pipeline instruction set simulator written in pure C++ from scratch. 
+This project is developed to deeply understand computer architecture, pipeline control, and hardware/software interfaces.
+
+---
 
 ## 🚀 Features & Current Status
 
 - **Architecture:** RV32I (32-bit base integer instruction set)
-- **Status:** Under active development 
-  - Base integer instruction decoding and execution loop
+- **Pipeline Structure:** Complete 5-stage pipeline simulation: `IF` (Fetch) -> `ID` (Decode) -> `EX` (Execute) -> `MEM` (Memory) -> `WB` (Write Back).
+- **Advanced Hazard Handling:**
+  - **Data Hazards:** Resolved using a dedicated **Forwarding Unit** (bypassing logic) from `MEM` and `WB` stages directly to the ALU inputs.
+  - **Strict MUX Selection Logic:** Implemented precise operand evaluation to prevent incorrect forwarding during instructions that utilize immediates (`IMM`) or the zero register (`x0`).
+- **Status:** Under active development. Core execution, pipeline logic, and data hazard controls are fully functional.
+
+---
 
 ## 🛠️ Supported Instructions
 
-- [x] R-type (add, sub, sll, slt, sltu, xor, srl, sra, or, and)
-- [x] I-type (addi, slti, sltiu, xori, ori, andi, slli, srli, srai)
-- [x] Load/Store instructions (lw, sw, etc.) [※注5]
-- [x] Branch/Jump instructions (beq, bne, jal, jalr, etc.) [※注5]
+- [x] **R-type:** `add`, `sub`, `sll`, `slt`, `sltu`, `xor`, `srl`, `sra`, `or`, `and`
+- [x] **I-type:** `addi`, `slti`, `sltiu`, `xori`, `ori`, `andi`, `slli`, `srli`, `srai`
+- [x] **Load/Store:** `lw`, `sw`, etc. (Memory access instructions)
+- [x] **Branch/Jump:** `beq`, `bne`, `jal`, `jalr`, etc. (Control flow instructions)
+
+---
+
+## 🗺️ Architecture Overview & Hazard Control
+
+The simulator maintains microarchitectural states using pipeline registers between each stage (`if_id`, `id_ex`, `ex_mem`, `mem_wb`).
+
+```
+
+[IF Stage] -> (if_id) -> [ID Stage] -> (id_ex) -> [EX Stage] -> (ex_mem) -> [MEM Stage] -> (mem_wb) -> [WB Stage]
+^                                                |
+|================== Forwarding Path =============|
+
+```
+
+### Technical Highlight: Forwarding Logic for Immediates
+In textbook pipeline concepts, forwarding conditions often assume register-to-register operations. In this implementation, to prevent control signals from mistakenly overwriting immediate operands (`IMM`) or fixed zero sources (`ZERO`) with bypassed register data, the Forwarding Unit strictly verifies the source type (`id_ex.src_type == SRC_REG`) before activating the bypass network. 
+
+**技術的ハイライト: 即値命令におけるフォワーディングの厳密な制御**
+教科書的なデータハザード判定（レジスタ番号の一致のみ）では、後続命令が即値（`ADDI`等）やゼロレジスタ（`x0`）をALU入力に選択している際、フォワーディングが誤発火してオペランドを破壊する罠があります。本シミュレータでは、入力ソースの属性を厳密に評価する選択論理を実装し、このハードウェア固有のバグを解決しています。
+
+---
 
 ## 💻 How to Build & Run
 
 ### Prerequisites
 - C++17 compatible compiler (GCC or Clang)
-- Make or CMake (whichever you use)
+- CMake (3.15+) or Make
 
-## Run
+### Build
+```bash
+mkdir build && cd build
+cmake ..
+make
+
 ```
-./rv32i-emu
+
+### Run
+
+```bash
+./rv32i-emu [Path to RISC-V Binary/Hex file]
+
 ```
+
+---
 
 ## 🗺️ Roadmap & TODO
-- [ ] Implement remaining RV32I instructions (Branching and Memory Access).
 
-- [ ] Enhance CSR (Control and Status Registers) implementation.
+* [ ] **Control Hazards:** Implement pipeline flushing and basic branch prediction.
+* [ ] **CSR (Control and Status Registers):** Enhance system register implementation and basic exception handling architecture.
+* [ ] **Verification:** Create a comprehensive test suite and integrate with official `riscv-tests`.
+* [ ] **Extensions:** Add support for RV32M (Multiplication and Division extension) in the future.
 
-- [ ] Create a comprehensive test suite using RISC-V architectural tests.
-
-- [ ] Add support for RV32M (Multiplication and Division extension) in the future.
+---
 
 ## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! 
+
+Contributions, issues, and feature requests are welcome!
 Feel free to check the Issues page if you want to contribute or give feedback.
+
+---
+
+## 👤 Author
+
+* **Yoshida Seiji (吉田誠司)**
+* Vocational school student at Nagoya Kogakuin College (名古屋工学院専門学校)
+* Focus: Low-level software/hardware development, Computer Architecture, Network Infrastructure.
 
