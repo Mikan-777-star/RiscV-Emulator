@@ -32,16 +32,13 @@ The simulator maintains microarchitectural states using pipeline registers betwe
 ```
 
 [IF Stage] -> (if_id) -> [ID Stage] -> (id_ex) -> [EX Stage] -> (ex_mem) -> [MEM Stage] -> (mem_wb) -> [WB Stage]
-^                                                |
-|================== Forwarding Path =============|
+                                                ^                                                |
+                                                |================== Forwarding Path =============|
 
 ```
 
 ### Technical Highlight: Forwarding Logic for Immediates
 In textbook pipeline concepts, forwarding conditions often assume register-to-register operations. In this implementation, to prevent control signals from mistakenly overwriting immediate operands (`IMM`) or fixed zero sources (`ZERO`) with bypassed register data, the Forwarding Unit strictly verifies the source type (`id_ex.src_type == SRC_REG`) before activating the bypass network. 
-
-**技術的ハイライト: 即値命令におけるフォワーディングの厳密な制御**
-教科書的なデータハザード判定（レジスタ番号の一致のみ）では、後続命令が即値（`ADDI`等）やゼロレジスタ（`x0`）をALU入力に選択している際、フォワーディングが誤発火してオペランドを破壊する罠があります。本シミュレータでは、入力ソースの属性を厳密に評価する選択論理を実装し、このハードウェア固有のバグを解決しています。
 
 ---
 
@@ -53,8 +50,6 @@ In textbook pipeline concepts, forwarding conditions often assume register-to-re
 
 ### Build
 ```bash
-mkdir build && cd build
-cmake ..
 make
 
 ```
