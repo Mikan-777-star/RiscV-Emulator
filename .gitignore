@@ -1,3 +1,10 @@
 *.bin
 *.o
 *.elf
+*.txt
+*.log
+*.sh
+rv32_emu
+rv32mi*
+rv32ui*
+riscv-tests/

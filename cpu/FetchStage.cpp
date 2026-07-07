@@ -1,18 +1,9 @@
 #include "CPU.hpp"
 #include "RiscV.hpp"
-//#include <iostream>
+#include <iostream>
 void CPU::fetch() {
     if (pc < 0x80000000 || pc >= 0x80000000 + memory.size() - 3) return;
-    if(last_stall_flag){
-        //std::cout << "last stall\n";
-        pc = last_stall_pc;
-        next_IF_ID_REG = RiscV::IF_ID_Latch();
-        return;
-    }
-    if(different_flag){
-        pc = last_actual_target;
-        different_flag = false;
-    }
+    
 
     //get_phys_addr is unnecessary here 
     //because Memory class already handles the address translation and range checking. 
@@ -22,6 +13,7 @@ void CPU::fetch() {
                     static_cast<uint32_t>(memory.read_byte(pc + 1) << 8) |
                     static_cast<uint32_t>(memory.read_byte(pc + 2) << 16) |
                     static_cast<uint32_t>(memory.read_byte(pc + 3) << 24);
+    ///std::cout <<"PC : "<<std::hex << pc << std::dec << " asm : "<< disassemble_riscv(inst) << std::endl; // デバッグ用に命令を文字列化して表示（必要に応じてコメントアウト可）
     bool pred_taken = false;
     uint32_t pred_target = pc + 4; 
     auto it = branch_predictor.find(pc);
@@ -29,10 +21,11 @@ void CPU::fetch() {
         pred_taken = true;
         pred_target = it->second.second;
     }
-    RiscV::IF_ID_Latch latch = { inst, pc, pred_taken, pred_target };
+
+    RiscV::IF_ID_Latch latch = {true, inst, pc, pred_taken, pred_target};
     //std::cout << "IF: PC=0x" << std::hex << pc << " INST=0x" << inst 
     //        << " PRED=" << (pred_taken ? "T" : "N") 
     //        << " PRED_TGT=0x" << pred_target << std::dec << std::endl;
     next_IF_ID_REG = latch;
-    pc = pred_target;
+    next_pc = pred_target;
 }

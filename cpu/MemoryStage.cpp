@@ -4,12 +4,13 @@
 void CPU::memory_access() {
     auto latch = current_EX_MEM_REG;
     
-    
+    next_MEM_WB_REG.valid = latch.valid; // 初期化
     next_MEM_WB_REG.rd_idx = latch.rd_idx;
     next_MEM_WB_REG.ctrl = latch.ctrl;
     next_MEM_WB_REG.alu_result = latch.alu_result;
     next_MEM_WB_REG.pc = latch.pc;
-    
+    next_MEM_WB_REG.csr_write_data = latch.csr_write_data;
+    next_MEM_WB_REG.csr_write_addr = latch.csr_write_addr; 
     if(latch.ctrl.mem_read || latch.ctrl.mem_write) {
         //get_phys_addr is unnecessary because it is in the memory class, 
         uint32_t addr = /*get_phys_addr*/(latch.alu_result);
@@ -19,7 +20,16 @@ void CPU::memory_access() {
         //          << " Size: " << ((latch.ctrl.mem_size == RiscV::MEM_SIZE::BYTE) ? "BYTE" : (latch.ctrl.mem_size == RiscV::MEM_SIZE::HALF) ? "HALF" : "WORD")
         //          << std::dec << std::endl;
         if (latch.ctrl.mem_write) {
-            
+            if (latch.alu_result == 0x80001000) { 
+                uint32_t status = latch.store_val;
+                if (status == 1) {
+                    std::cout << "\n🎉 [TEST PASSED] " << std::endl;
+                } else {
+                    // 下位1ビットが0で、残りのビットに失敗したテストケース番号がシフトされて入ってくるわ
+                    std::cout << "\n❌ [TEST FAILED] Case Number: " << (status >> 1) << std::endl;
+                }
+                halted = true; // CPUを停止させる
+            }else
             if (latch.alu_result == 0x10000000) { // UART
                 //std::cout << "[UART OUTPUT] latch.alu_result = 0x" << std::hex << latch.store_val << std::dec << std::endl;
                 if (latch.ctrl.mem_size == RiscV::MEM_SIZE::BYTE) {

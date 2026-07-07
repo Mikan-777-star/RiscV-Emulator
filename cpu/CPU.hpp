@@ -14,11 +14,16 @@ private:
     void evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t alu_result, bool& take_branch, uint32_t& target_pc);
     uint32_t registers[32];
     uint32_t pc;
+    uint32_t next_pc;
     uint32_t last_actual_target = 0; // 
     bool different_flag = false;
     uint32_t last_stall_pc = 0;
     bool last_stall_flag = false;
     bool halted = false;
+    bool next_trap_asserted = false;
+    bool timer_irq = false;
+    uint32_t next_trap_pc = 0;
+    uint32_t next_trap_cause = 8;
     RiscV::IF_ID_Latch current_IF_ID_REG, next_IF_ID_REG;
     RiscV::ID_EX_Latch current_ID_EX_REG, next_ID_EX_REG;
     RiscV::EX_MEM_Latch current_EX_MEM_REG, next_EX_MEM_REG;
@@ -26,7 +31,7 @@ private:
     // キー: 分岐命令のPC
     // 値: {2ビットカウンタ(0~3), ターゲットPC}
     std::unordered_map<uint32_t, std::pair<uint8_t, uint32_t>> branch_predictor;
-    std::unordered_map<uint32_t, uint32_t> csrs;
+    std::array<uint32_t, 4096> csrs = {0};
 public:
     Memory memory;
     CPU();
@@ -37,6 +42,8 @@ public:
     void set_pc(uint32_t new_pc) ;    
     uint32_t get_register(uint8_t rs);
     void  flush_pipeline();
+    uint32_t get_pc() const { return pc; }
+    void csr_execute(const RiscV::ID_EX_Latch& latch, RiscV::EX_MEM_Latch& ex_mem_latch, uint32_t alu_in);
 
     void decode();
 
@@ -49,6 +56,6 @@ public:
     void fetch() ;
     void tick() ;
     std::string disassemble_riscv(uint32_t inst);
-
+    void dump_active_csrs() ;
     //bool load_binary(const std::string& filename, uint32_t load_addr) ;
 };

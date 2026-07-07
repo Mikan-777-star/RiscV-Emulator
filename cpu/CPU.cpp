@@ -22,20 +22,73 @@ void CPU::flush_pipeline() {
 
 
 void CPU::tick() {
-    write_back();
-    //std::cout << "After write_back: PC=" << std::hex << pc << std::dec << std::endl;
-    memory_access();
-    //std::cout << "After memory_access: PC=" << std::hex << pc << std::dec << std::endl;
-    execute();
-    //std::cout << "After execute: PC=" << std::hex << pc << std::dec << std::endl;
     decode();
-    //std::cout << "After decode: PC=" << std::hex << pc << std::dec << std::endl;
     fetch();
-    //std::cout << "After fetch: PC=" << std::hex << pc << std::dec << std::endl;
-    current_IF_ID_REG = next_IF_ID_REG;
-    current_ID_EX_REG = next_ID_EX_REG;
-    current_EX_MEM_REG = next_EX_MEM_REG;
+    execute();
+    write_back();
+    memory_access();
+    csrs[0xB00]++;
+
+    bool interrupt_asserted = false;
+    // もし外部タイマー(timer_irq)があり、mstatusで割り込みが許可されていたら
+    if (this->timer_irq && (csrs[0x300] & (1 << 3))) { 
+        interrupt_asserted = true;
+    }
+
+    // =================================================================
+    // 4. クロックの立ち上がり (apply_clock_edge) のシミュレート
+    // =================================================================
+    
+    // --- 優先度①：外部からの「割り込み」が発生した瞬間 ---
+    if (interrupt_asserted) {
+        csrs[0x341] = pc;               // 次に実行するはずだったPCを mepc に退避
+        csrs[0x342] = (1ULL << 31) | 7; // mcause の最上位ビットを1にし、コード7(タイマー)をセット
+        
+        // パイプラインを全面フラッシュ（全ステージにバブルを強制注入）
+        current_IF_ID_REG  = RiscV::IF_ID_Latch();
+        current_ID_EX_REG  = RiscV::ID_EX_Latch();
+        current_EX_MEM_REG = RiscV::EX_MEM_Latch();
+        current_MEM_WB_REG = RiscV::MEM_WB_Latch();
+        
+        pc = csrs[0x305]; // 次のサイクルは mtvec (例外ハンドラ) からフェッチ
+        return;           // このサイクルの通常更新はすべてスキップして終了
+    }
+
+    
+
     current_MEM_WB_REG = next_MEM_WB_REG;
+    current_EX_MEM_REG = next_EX_MEM_REG;
+
+
+
+    // --- 2. ID_EX ラッチの更新論理（優先順位：予測ミス > ストール > 通常） ---
+    if (different_flag) {
+        // 予測ミス時は、次にExecuteに進むはずだった命令を殺してバブルにする
+        current_ID_EX_REG = RiscV::ID_EX_Latch();
+    } else if (last_stall_flag) {
+        // ロードハザード（ストール）時は、デコードを保留するためExecuteにはバブルを送り出す
+        current_ID_EX_REG = RiscV::ID_EX_Latch();
+    } else {
+        // 通常時は、Decodeステージが生成した次の制御信号をそのまま受け入れる
+        current_ID_EX_REG = next_ID_EX_REG;
+    }
+
+    // --- 3. IF_ID ラッチと PC の更新論理 ---
+    if (different_flag) {
+        // 予測ミス時は、フェッチ中だった間違った命令を破棄（バブル化）し、正しいターゲットへPCを飛ばす
+        current_IF_ID_REG = RiscV::IF_ID_Latch();
+        pc = last_actual_target;
+        different_flag = false; // フラグクリア
+    } else if (last_stall_flag) {
+        // ストール時は、current_IF_ID_REG も PC も「今の状態を完全に維持（更新しない）」
+        // next_IF_ID_REG をコピーしないことで、次のサイクルも同じ命令が [ID] に留まるわ
+        last_stall_flag = false; // フラグクリア
+    } else {
+        // 通常時は、新しくフェッチした命令を受け入れ、PCを次のアドレスに進める
+        current_IF_ID_REG = next_IF_ID_REG;
+        pc = next_pc; // Fetchステージで計算しておいた次のPC（通常はpc+4、予測Takenなら予測先）
+    }
+
 }
 
 // テスト用・ヘルパー関数
@@ -69,7 +122,7 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
     std::stringstream ss;
 
     switch (opcode) {
-        case 0x33: // OP_RType
+        case RiscV::OP_RType : // OP_RType
             switch (funct3) {
                 case 0x0: ss << ((funct7 == 0x20) ? "sub" : "add"); break;
                 case 0x1: ss << "sll"; break;
@@ -84,7 +137,7 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             ss << " x" << (int)rd << ", x" << (int)rs1 << ", x" << (int)rs2;
             break;
 
-        case 0x13: // OP_IMM
+        case RiscV::OP_IMM: // OP_IMM
             {
                 int32_t imm = static_cast<int32_t>(inst) >> 20; // 12bit符号拡張
                 switch (funct3) {
@@ -102,7 +155,7 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             }
             break;
 
-        case 0x03: // OP_LOAD
+        case RiscV::OP_LOAD: // OP_LOAD
             {
                 int32_t imm = static_cast<int32_t>(inst) >> 20;
                 switch (funct3) {
@@ -117,7 +170,7 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             }
             break;
 
-        case 0x23: // OP_STORE
+        case RiscV::OP_STORE: // OP_STORE
             {
                 int32_t imm = ((static_cast<int32_t>(inst) >> 25) << 5) | ((inst >> 7) & 0x1F);
                 if (imm & 0x800) imm |= 0xFFFFF000; // 12bit符号拡張
@@ -131,7 +184,7 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             }
             break;
 
-        case 0x63: // OP_BRANCH
+        case RiscV::OP_BRANCH: // OP_BRANCH
             {
                 int32_t imm = ((inst >> 31) & 1) << 12 |
                               ((inst >> 7)  & 1) << 11 |
@@ -151,21 +204,21 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             }
             break;
 
-        case 0x37: // OP_LUI
+        case RiscV::OP_LUI: // OP_LUI
             {
                 uint32_t imm = inst & 0xFFFFF000;
                 ss << "lui x" << (int)rd << ", 0x" << std::hex << (imm >> 12);
             }
             break;
 
-        case 0x17: // OP_AUIPC
+        case RiscV::OP_AUIPC: // OP_AUIPC
             {
                 uint32_t imm = inst & 0xFFFFF000;
                 ss << "auipc x" << (int)rd << ", 0x" << std::hex << (imm >> 12);
             }
             break;
 
-        case 0x6F: // OP_JAL
+        case RiscV::OP_JAL: // OP_JAL
             {
                 int32_t imm = ((inst >> 31) & 1) << 20 |
                               ((inst >> 12) & 0xFF) << 12 |
@@ -176,20 +229,23 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
             }
             break;
 
-        case 0x67: // OP_JALR
+        case RiscV::OP_JALR: // OP_JALR
             {
                 int32_t imm = static_cast<int32_t>(inst) >> 20;
                 ss << "jalr x" << (int)rd << ", " << imm << "(x" << (int)rs1 << ")";
             }
             break;
 
-        case 0x73: // OP_SYSTEM
+        case RiscV::OP_SYSTEM: // OP_SYSTEM
             if (funct3 == 0x0) {
                 uint32_t sys_imm = inst >> 20;
                 if (sys_imm == 0x000) return "ecall";
                 if (sys_imm == 0x001) return "ebreak";
+                if (sys_imm == 0x302) return "mret";
+            }else{
+                uint32_t csr_addr = inst >> 20;
+                ss << "csrrx x" << (int)rd << ", 0x" << std::hex << csr_addr << ", x" << (int)rs1;
             }
-            ss << "system_unknown";
             break;
 
         default:
@@ -198,4 +254,22 @@ std::string CPU::disassemble_riscv(uint32_t inst) {
     }
 
     return ss.str();
+}
+
+
+std::array<uint32_t, 4096> csrs = {0}; 
+
+void CPU::dump_active_csrs() {
+    std::cout << "=== Active CSRs Dump (std::array) ===\n";
+    
+    for (size_t addr = 0; addr < csrs.size(); ++addr) {
+        // 値が0以外のものを「現在有効なCSR」として扱う（初期値が0でないCSRがある場合は適宜調整）
+        if (csrs[addr] != 0) {
+            std::cout << "CSR [0x" 
+                      << std::hex << std::setw(3) << std::setfill('0') << addr 
+                      << "] = 0x" 
+                      << std::setw(8) << csrs[addr] << std::dec << "\n";
+        }
+    }
+    std::cout << "=====================================\n";
 }

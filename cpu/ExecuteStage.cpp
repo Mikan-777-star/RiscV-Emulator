@@ -1,6 +1,8 @@
 #include "CPU.hpp"
 #include "RiscV.hpp"
 #include <iostream>
+#include <iomanip>
+
 
 
 void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1, uint32_t& alu_in2, uint32_t& store_val) {
@@ -30,10 +32,13 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
             case WB_SRC::ALU: wb_data = wb_latch.alu_result; break;
             case WB_SRC::MEM: wb_data = wb_latch.mem_read_data; break;
             case WB_SRC::PC4: wb_data = wb_latch.pc + 4; break;
+            
         }
-        if (wb_latch.rd_idx == latch.rs1_idx) alu_in1 = wb_data;
+        if (latch.ctrl.src1_sel == ALU_SRC1::RS1 && wb_latch.rd_idx == latch.rs1_idx) alu_in1 = wb_data;
+        if (latch.ctrl.src2_sel == ALU_SRC2::RS2 && wb_latch.rd_idx == latch.rs2_idx) {
+            alu_in2 = wb_data;
+        }
         if (wb_latch.rd_idx == latch.rs2_idx) {
-            if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = wb_data;
             store_val = wb_data; // ✨修正: ストアデータもフォワーディング
         }
     }
@@ -49,11 +54,13 @@ void CPU::resolve_forwarding(const RiscV::ID_EX_Latch& latch, uint32_t& alu_in1,
             forward_data = mem_latch.pc + 4; // ✨ JAL/JALRの戻り先アドレス（PC+4）を正しくフォワーディング
         }
         if (!mem_latch.ctrl.mem_read) { // LOAD命令以外の場合
-            if (mem_latch.rd_idx == latch.rs1_idx) {
+            if (latch.ctrl.src1_sel == ALU_SRC1::RS1 && mem_latch.rd_idx == latch.rs1_idx) {
                 alu_in1 = forward_data; // ✨ 正しい戻り先アドレスがJALRのベースに入る！
             }
+            if (latch.ctrl.src2_sel == ALU_SRC2::RS2 && mem_latch.rd_idx == latch.rs2_idx) {
+                alu_in2 = forward_data;
+            }
             if (mem_latch.rd_idx == latch.rs2_idx) {
-                if (latch.ctrl.src2_sel == ALU_SRC2::RS2) alu_in2 = forward_data;
                 store_val = forward_data;
             }
         }
@@ -159,26 +166,61 @@ void CPU::evaluate_branch_and_predict(const RiscV::ID_EX_Latch& latch, uint32_t 
             different_flag = true;
             last_actual_target = actual_target; // 予測が外れたときの正しいターゲットPCを保存
             //std::cout << "actual_target: " <<std::hex << actual_target << std::dec << "\n"; 
-            
-            flush_pipeline();
         }
     }
 }
 
+void CPU::csr_execute(const RiscV::ID_EX_Latch& latch,RiscV::EX_MEM_Latch& ex_mem_latch, uint32_t alu_in){
+    if(!latch.ctrl.is_csrr){return;}
+    else{
+        //dump_active_csrs();
+    }
+    //std::cout << "EX: PC=0x" << std::hex << latch.pc << " CSR_EXECUTE" << std::dec << std::endl;
+    uint32_t old_val = latch.csr_old_val; // IDステージが先読みしてくれた古い値
+    bool is_imm = (latch.func3 & 0x4) != 0;
+    // 操作対象のデータ（レジスタ値か、あるいは5bitのゼロ拡張即値か）
+    uint32_t rs1_val = alu_in;
+    
+    // 5bitの即値（zimm）は rs1 フィールド（ビット15-19）に入っているから、rs1_idxそのものよ
+    uint32_t zimm = latch.rs1_idx; 
+
+    uint32_t op_val = is_imm ? zimm : rs1_val;
+    uint32_t new_val = old_val; 
+
+    // funct3の下位2ビットで操作を決定 (01: RW, 10: RS, 11: RC)
+    uint32_t op_type = latch.func3 & 0x3; 
+
+    if (op_type == 1) {        // csrrw / csrrwi
+        new_val = op_val;
+    } 
+    else if (op_type == 2) {   // csrrs / csrrsi
+        new_val = old_val | op_val;
+    } 
+    else if (op_type == 3) {   // csrrc / csrrci
+        new_val = old_val & (~op_val);
+    }
+
+    ex_mem_latch.csr_write_data = new_val;
+    ex_mem_latch.csr_write_addr = latch.csr_addr;
+    //printf("EX: PC=0x%08X CSR[0x%03X] = 0x%08X (old: 0x%08X, op_val: 0x%08X)\n", latch.pc, latch.csr_addr, new_val, old_val, op_val);
+    // 古い値をWBステージへ送り、rdに書き戻す
+    ex_mem_latch.alu_result = old_val;
+    
+    ex_mem_latch.ctrl.mem_read  = false;
+    ex_mem_latch.ctrl.mem_write = false;
+}
+
 // 司令塔となるメインの execute ステージ
 void CPU::execute() {
-    //if (ID_EX_REG.empty()) return;
+    RiscV::ID_EX_Latch latch = current_ID_EX_REG;
     
-    RiscV::ID_EX_Latch latch = current_ID_EX_REG;//ID_EX_REG.front();
-    //ID_EX_REG.pop();
-    bool is_bubble = (!latch.ctrl.reg_write && !latch.ctrl.mem_read && !latch.ctrl.mem_write && 
-                      !latch.ctrl.is_branch && !latch.ctrl.is_jump && !latch.ctrl.is_ecall);
-                      
-    if (is_bubble) {
+    if (latch.valid == false) {
         next_EX_MEM_REG = RiscV::EX_MEM_Latch(); // 次のステージへバブルを流す
+        //std::cout << "EX: PC=0x" << std::hex << latch.pc << " BUBBLE" << std::dec << std::endl;
         return; // 早期リターンして、古い分岐判定や registers[0] の誤評価を防ぐ！
     }
     RiscV::EX_MEM_Latch nextlatch{};
+    nextlatch.valid = true;
     nextlatch.rd_idx = latch.rd_idx;
     nextlatch.ctrl = latch.ctrl;
     nextlatch.pc = latch.pc;
@@ -188,11 +230,16 @@ void CPU::execute() {
 
     // 1. フォワーディングの解決
     resolve_forwarding(latch, alu_in1, alu_in2, nextlatch.store_val);
-
+    //もしかして割り込むならここ説
+    if (latch.ctrl.is_csrr) {
+        csr_execute(latch, nextlatch, alu_in1);
+        
+    }else{
+        nextlatch.alu_result = calculate_alu(latch.ctrl.alu_op, alu_in1, alu_in2);
+    }
     // 2. ALU演算の実行
     //std::cout << "EX: PC=0x" << std::hex << latch.pc << " ALU_IN1=0x" << alu_in1 << " ALU_IN2=0x" << alu_in2 << std::endl;
-    nextlatch.alu_result = calculate_alu(latch.ctrl.alu_op, alu_in1, alu_in2);
-
+    
     // 3. 分岐判定と予測処理
     bool take_branch = false;
     uint32_t target_pc = 0;
@@ -200,15 +247,83 @@ void CPU::execute() {
 
     // システムコール(ECALL)の処理
     if (latch.ctrl.is_ecall) {
-        if (registers[17] == 93) {
-            std::cout << "ECALL: Exit requested. Status: " << registers[10] << std::endl;
-            exit(0);
-        }else{
-            std::cout << "ECALL : NOT FOUND" << std::endl;
+        // 1. 現在の ecall 命令の PC を mepc (0x341) に保存
+        // ※ 本来はWBステージでコミットすべきだけど、PCのジャンプと同時に行うならここで即時退避よ
+        // std::cout << "EX: PC=0x" << std::hex << latch.pc << " ECALL"  << "\n"
+        //            << " |  x1: " << std::setw(2) << get_register(1) 
+        //            << " |  x2: " << std::setw(2) << get_register(2) 
+        //            << " |  x3: " << std::setw(2) << get_register(3) << "\n"
+        //            << " |  x4: " << std::setw(2) << get_register(4) 
+        //            << " |  x5: " << std::setw(2) << get_register(5) 
+        //            << " |  x6: " << std::setw(2) << get_register(6) << "\n"
+        //            << " |  x7: " << std::setw(2) << get_register(7) 
+        //            << " |  x8: " << std::setw(2) << get_register(8) 
+        //            << " |  x9: " << std::setw(2) << get_register(9) << "\n"
+        //            << " | x10: " << std::setw(2) << get_register(10) 
+        //            << " | x11: " << std::setw(2) << get_register(11) 
+        //            << " | x12: " << std::setw(2) << get_register(12) << "\n"
+        //            << " | x13: " << std::setw(2) << get_register(13) 
+        //            << " | x14: " << std::setw(2) << get_register(14) 
+        //            << " | x15: " << std::setw(2) << get_register(15) << "\n"
+        //            << " | x16: " << std::setw(2) << get_register(16) 
+        //            << " | x17: " << std::setw(2) << get_register(17) 
+        //            << " | x18: " << std::setw(2) << get_register(18) << "\n"
+        //            << " | x19: " << std::setw(2) << get_register(19) 
+        //            << " | x20: " << std::setw(2) << get_register(20) 
+        //            << " | x21: " << std::setw(2) << get_register(21) << "\n"
+        //            << " | x22: " << std::setw(2) << get_register(22) 
+        //            << " | x23: " << std::setw(2) << get_register(23) 
+        //            << " | x24: " << std::setw(2) << get_register(24) << "\n"
+        //            << " | x25: " << std::setw(2) << get_register(25) 
+        //            << " | x26: " << std::setw(2) << get_register(26) 
+        //            << " | x27: " << std::setw(2) << get_register(27) << "\n"
+        //            << " | x28: " << std::setw(2) << get_register(28) 
+        //            << " | x29: " << std::setw(2) << get_register(29) 
+        //            << " | x30: " << std::setw(2) << get_register(30) << "\n"
+        //            << " | x31: " << std::setw(2) << get_register(31) <<std::dec<< std::endl;
+        if (registers[17] == 93 || 
+            (current_EX_MEM_REG.ctrl.wb_src == RiscV::WB_SRC::ALU && current_EX_MEM_REG.rd_idx == 17 && current_EX_MEM_REG.alu_result == 93) ||
+            (current_MEM_WB_REG.ctrl.wb_src == RiscV::WB_SRC::ALU && current_MEM_WB_REG.rd_idx == 17 && current_MEM_WB_REG.alu_result == 93)) { // a7 == 93
+            auto statuscode = registers[10]; // a0
+            if(current_EX_MEM_REG.ctrl.wb_src == RiscV::WB_SRC::ALU && current_EX_MEM_REG.rd_idx == 10){
+                statuscode = current_EX_MEM_REG.alu_result;
+            }
+            if(current_MEM_WB_REG.ctrl.wb_src == RiscV::WB_SRC::ALU && current_MEM_WB_REG.rd_idx == 10){
+                statuscode = current_MEM_WB_REG.alu_result;
+            }
+            printf("Test finished with code: %d\n", statuscode); // a0
+            halted = true;
+            return;
         }
-    }else if (latch.ctrl.is_ebreak){
-        std::cout << "EBRAKE" << std::endl;
+        csrs[0x341] = latch.pc;
+        
+        // 2. 例外原因を mcause (0x342) にセット (環境呼び出しは 8 または 11)
+        csrs[0x342] = 8; 
+        
+        // 3. mtvec (0x305) に書き込まれているトラップハンドラのアドレスへジャンプ
+        last_actual_target = csrs[0x305];
+        //std::cout << "EX: PC=0x" << std::hex << latch.pc << " ECALL: Jumping to trap handler at 0x" << last_actual_target << std::dec << std::endl;
+        different_flag = true; 
+        // ecall自体はこれ以上後ろのステージで何もさせないためにバブルを流す
+        next_EX_MEM_REG = RiscV::EX_MEM_Latch();
+        return;
     }
 
+    // --- ✨ mret 命令の処理 ---
+    if (latch.ctrl.is_mret) {
+        // 1. mepc (0x341) に保存されていた、トラップ発生元のPCを復元してそこへジャンプ
+        last_actual_target = csrs[0x341];
+        std::cout << "EX: PC=0x" << std::hex << latch.pc << " MRET: Returning to 0x" << last_actual_target << std::dec << std::endl;
+        different_flag = true;
+        next_EX_MEM_REG = RiscV::EX_MEM_Latch();
+        return;
+    }
+    if (latch.ctrl.is_fence_i) {
+        // FENCE.I命令の次のPC（latch.pc + 4）からフェッチをやり直させる
+        last_actual_target = latch.pc + 4;
+        different_flag = true; // 強制ジャンプ発動（IF_IDラッチのバブル化とPC更新をtickに要求）
+        next_EX_MEM_REG = RiscV::EX_MEM_Latch(); // 自身は中身のないラッチを流す
+        return;
+    }
     next_EX_MEM_REG = nextlatch;
 }

@@ -20,7 +20,7 @@ namespace RiscV {
     enum class ALU_OPS { ADD, SUB, AND, OR, XOR, SLL, SRL, SRA, SLT, SLTU };
     enum class ALU_SRC1 { RS1, PC, ZERO };
     enum class ALU_SRC2 { RS2, IMM };
-    enum class WB_SRC { ALU, MEM, PC4 };
+    enum class WB_SRC { ALU, MEM, PC4};
     enum class MEM_SIZE { BYTE, HALF, WORD };
     
    
@@ -40,16 +40,20 @@ namespace RiscV {
         WB_SRC wb_src{WB_SRC::ALU};
         bool is_ecall{false};
         bool is_ebreak{false};
+        bool is_mret{false};
         bool is_fence{false};
-
+        bool is_csrr{false};
+        bool is_fence_i{false};
     };
     struct IF_ID_Latch {
+        bool valid{false};
         uint32_t inst;
         uint32_t pc;   
         bool predicted_taken{false};
         uint32_t predicted_target{0};
     };
     struct ID_EX_Latch {
+        bool valid{false};
         uint32_t val_rs1{0};
         uint32_t val_rs2{0};
         int32_t imm{0};
@@ -61,9 +65,14 @@ namespace RiscV {
         ControlSignals ctrl{};
         bool predicted_taken{false};
         uint32_t predicted_target{0};
+        uint32_t csr_old_val{0};
+        uint32_t csr_addr{0};
+        uint32_t func3;
+        
     };
 
     struct EX_MEM_Latch {
+        bool valid{false};
         uint32_t alu_result{0};
         uint32_t store_val{0};
         uint8_t rd_idx{0};
@@ -71,14 +80,21 @@ namespace RiscV {
         ControlSignals ctrl{};
         bool take_branch{false};
         uint32_t target_pc{0};
+        // ✨ CSR書き戻し用の拡張
+        uint32_t csr_write_data{0};
+        uint32_t csr_write_addr{0};
     };
 
     struct MEM_WB_Latch {
+        bool valid{false};
         uint32_t alu_result{0};
         uint32_t mem_read_data{0};
         uint8_t rd_idx{0};
         uint32_t pc{0};  
         ControlSignals ctrl{};
+        // ✨ CSR書き戻し用の拡張
+        uint32_t csr_write_data{0};
+        uint32_t csr_write_addr{0};
     };
 
     // 符号拡張ユーティリティ

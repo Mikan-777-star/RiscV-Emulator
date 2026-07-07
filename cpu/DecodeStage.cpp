@@ -11,13 +11,16 @@ void CPU::decode() {
     uint8_t opcode = inst & 0x7f;
     uint8_t funct3 = (inst >> 12) & 0x7;
     uint8_t funct7 = (inst >> 25);
-    
+    latch.valid = firstlatch.valid;
+    latch.imm_unsigned = (inst >> 20) & 0xfff;
     latch.rs1_idx = (inst >> 15) & 0x1f;
     latch.rs2_idx = (inst >> 20) & 0x1f;
     latch.rd_idx = (inst >> 7) & 0x1f;
+    latch.csr_addr = (inst >> 20) & 0xFFF;
     latch.pc = firstlatch.pc;
     latch.predicted_taken = firstlatch.predicted_taken;
     latch.predicted_target = firstlatch.predicted_target;
+    latch.func3 = funct3;
    // if(latch.pc == 0x8000008c){
        //std::cout << latch.pc <<" : " << disassemble_riscv(inst) << std::endl;
       // std::exit(1);
@@ -35,7 +38,7 @@ void CPU::decode() {
             case 0x2: latch.ctrl.alu_op = ALU_OPS::SLT; break;
             case 0x3: latch.ctrl.alu_op = ALU_OPS::SLTU; break;
             case 0x4: latch.ctrl.alu_op = ALU_OPS::XOR; break;
-            case 0x5: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::SRL : ALU_OPS::SRA; break;
+            case 0x5: latch.ctrl.alu_op = (funct7 == 0x20) ? ALU_OPS::SRA : ALU_OPS::SRL; break;
             case 0x6: latch.ctrl.alu_op = ALU_OPS::OR; break;
             case 0x7: latch.ctrl.alu_op = ALU_OPS::AND; break;
         }
@@ -54,7 +57,7 @@ void CPU::decode() {
             case 0x6: latch.ctrl.alu_op = ALU_OPS::OR; break;
             case 0x7: latch.ctrl.alu_op = ALU_OPS::AND; break;
             case 0x1: latch.ctrl.alu_op = ALU_OPS::SLL; latch.imm &= 0x1F; break;
-            case 0x5: latch.ctrl.alu_op = (funct7 == 0) ? ALU_OPS::SRL : ALU_OPS::SRA; latch.imm &= 0x1F; break;
+            case 0x5: latch.ctrl.alu_op = (funct7 == 0x20) ? ALU_OPS::SRA : ALU_OPS::SRL; latch.imm &= 0x1F; break;
         }
         break;
     case OP_LOAD:
@@ -84,10 +87,15 @@ void CPU::decode() {
         latch.ctrl.branch_op = funct3;
         break;
     case OP_LUI:
+        latch.ctrl.wb_src = WB_SRC::ALU; // またはLUI専用のソース
         latch.ctrl.src1_sel = ALU_SRC1::ZERO;
         latch.ctrl.src2_sel = ALU_SRC2::IMM;
         latch.ctrl.reg_write = true;
-        latch.imm = inst & 0xFFFFF000;
+        latch.ctrl.alu_op = ALU_OPS::ADD; // 0 + IMM を計算させるため
+        
+        // 💡 修正：明確に int32_t にキャストしてから代入する
+        // inst & 0xFFFFF000 の結果を確実に int32_t として確定させるのよ
+        latch.imm = static_cast<int32_t>(inst & 0xFFFFF000);
         break;
     case OP_AUIPC:
         latch.ctrl.src1_sel = ALU_SRC1::PC;
@@ -119,11 +127,20 @@ void CPU::decode() {
             switch (inst >> 20) {
                 case 0x000: latch.ctrl.is_ecall = true; break;
                 case 0x001: latch.ctrl.is_ebreak = true; break;
+                case 0x302: latch.ctrl.is_mret = true; break;
             }
+        }else{
+            latch.ctrl.wb_src = RiscV::WB_SRC::ALU; // CSR命令の結果はALUの出力として扱う
+            
+            latch.ctrl.is_csrr = true;
         }
         break;
     case OP_FENCE:
-        latch.ctrl.is_fence = true;
+        if (funct3 == 0x1) {
+        latch.ctrl.is_fence_i = true; // ✨ FENCE.Iを厳密に識別
+    } else {
+        latch.ctrl.is_fence = true;   // 通常のFENCE（今回はNOP扱いでいいわ）
+    }
         break;
     }
     // --- ストール判定 ---
@@ -135,13 +152,17 @@ void CPU::decode() {
         bool use_rs2 = (latch.ctrl.src2_sel == ALU_SRC2::RS2 || latch.ctrl.is_branch || latch.ctrl.mem_write);
         if((use_rs1 && (latch.rs1_idx == ex_latch.rd_idx)) || (use_rs2 && (latch.rs2_idx == ex_latch.rd_idx))){
             next_ID_EX_REG = RiscV::ID_EX_Latch();
-            //std::cout << "stall \n";
             last_stall_flag = true;
-            last_stall_pc = latch.pc;
-            next_IF_ID_REG = firstlatch;
             return;
         }
     }
-    
+
+    bool is_pipeline_busy = (current_ID_EX_REG.valid || current_EX_MEM_REG.valid || current_MEM_WB_REG.valid);
+    if(is_pipeline_busy && (latch.ctrl.is_ecall || latch.ctrl.is_ebreak || latch.ctrl.is_mret || latch.ctrl.is_fence_i || latch.ctrl.is_csrr)){
+        next_ID_EX_REG = RiscV::ID_EX_Latch();
+        ///std::cout << "stall"  << "valid ex men wb"  << current_ID_EX_REG.valid << " " <<  current_EX_MEM_REG.valid <<" " << current_MEM_WB_REG.valid << std::endl;
+        last_stall_flag = true;
+        return;
+    }
     next_ID_EX_REG = latch;
 }

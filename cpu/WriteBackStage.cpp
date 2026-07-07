@@ -16,6 +16,9 @@ void CPU::write_back() {
         //          << std::dec << std::endl;
         registers[latch.rd_idx] = write_data;
     }
+    if (latch.valid && latch.ctrl.is_csrr) {
+        csrs[latch.csr_write_addr] = latch.csr_write_data;
+    }
     
     bool is_nop = (!latch.ctrl.reg_write && !latch.ctrl.mem_read && !latch.ctrl.mem_write && 
                    !latch.ctrl.is_branch && !latch.ctrl.is_jump && !latch.ctrl.is_ecall);
